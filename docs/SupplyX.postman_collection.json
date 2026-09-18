@@ -1,0 +1,259 @@
+{
+  "info": {
+    "name": "SupplyX local starter",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Local demo only. Set demoUser per role; copy returned UUIDs to variables. Set a near-future auction deadline. See docs/API.md."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:3001/api"
+    },
+    {
+      "key": "demoUser",
+      "value": "10000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "requestId",
+      "value": ""
+    },
+    {
+      "key": "auctionId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "My profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/me"
+      }
+    },
+    {
+      "name": "Products",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/products"
+      }
+    },
+    {
+      "name": "My requests",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/requests"
+      }
+    },
+    {
+      "name": "Request stock",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/requests",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": \"20000000-0000-4000-8000-000000000001\",\n  \"quantity\": 5\n}"
+        }
+      }
+    },
+    {
+      "name": "Auctions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auctions"
+      }
+    },
+    {
+      "name": "Create auction (admin)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auctions",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requestIds\": [\n    \"{{requestId}}\"\n  ],\n  \"closesAt\": \"2030-01-01T12:00:00Z\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Bid (supplier)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auctions/{{auctionId}}/bids",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"totalCents\": 95000\n}"
+        }
+      }
+    },
+    {
+      "name": "Award (admin)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auctions/{{auctionId}}/award",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      }
+    },
+    {
+      "name": "Orders",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/orders"
+      }
+    },
+    {
+      "name": "Dispatch (supplier)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/orders/{{orderId}}/dispatch",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      }
+    },
+    {
+      "name": "Receive (shop)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-demo-user",
+            "value": "{{demoUser}}"
+          }
+        ],
+        "url": "{{baseUrl}}/allocations/{{requestId}}/receive",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      }
+    }
+  ]
+}
