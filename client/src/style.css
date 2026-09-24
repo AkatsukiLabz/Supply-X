@@ -918,3 +918,33 @@ a:focus-visible {
   margin: 14px 0 0;
   padding: 12px 14px;
 }
+
+
+.bid-guidance {
+  background: linear-gradient(135deg, #fffaf0, #f4f8ef);
+  border: 1px solid #eadfbf;
+  border-left: 4px solid #c39a32;
+  border-radius: 14px;
+  color: #435f50;
+  flex: 1 0 100%;
+  padding: 14px 16px;
+}
+
+.bid-guidance strong {
+  color: #194f3d;
+  display: block;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.bid-guidance ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.bid-guidance li {
+  color: #61756b;
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 3px 0;
+}

@@ -297,6 +297,16 @@ function App({ session, onSignOut }) {
                     submitSupplierBid(a.id, totalCents);
                   }}
                 >
+                  <div className="bid-guidance">
+                    <strong>Before you bid</strong>
+                    <ul>
+                      <li>Your price must include delivery and all supplier charges.</li>
+                      {a.retail_benchmark_cents > 0 && (
+                        <li>Keep your delivered total below {money(a.retail_benchmark_cents)} to qualify.</li>
+                      )}
+                      <li>Competitors cannot see your bid while bidding is open.</li>
+                    </ul>
+                  </div>
                   <label>
                     Total delivered price
                     <span className="money-input">
