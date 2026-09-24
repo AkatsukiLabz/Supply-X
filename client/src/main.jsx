@@ -532,16 +532,33 @@ function App({ session, onSignOut }) {
                         <strong>{money(o.total_cents)}</strong>
                       </p>
                     )}
+                    {user?.role === "supplier" &&
+                      o.supplier_payout_cents !== undefined && (
+                        <p className="muted">
+                          Supplier payout after SupplyX fee: {" "}
+                          <strong>{money(o.supplier_payout_cents)}</strong>
+                        </p>
+                      )}
+                    {user?.role === "admin" &&
+                      o.supplier_fee_cents !== undefined && (
+                        <p className="muted">
+                          SupplyX supplier fee: {" "}
+                          <strong>{money(o.supplier_fee_cents)}</strong>
+                        </p>
+                      )}
                     {o.allocations.map((x) => (
                       <div className="allocation" key={x.request_id}>
                         <strong>{x.shop_name}</strong>
                         <p>
                           {x.quantity} × {o.pack} · {money(x.charge_cents)}
                         </p>
+                        {x.savings_cents !== undefined && (
+                          <small>Shop saving: {money(x.savings_cents)}</small>
+                        )}
                         {x.received_at ? (
                           <span className="pill">Received</span>
                         ) : user?.role === "shop" &&
-                          o.status === "dispatched" ? (
+                          ["dispatched", "accepted"].includes(o.status) ? (
                           <button
                             disabled={busy}
                             onClick={() =>
@@ -559,25 +576,35 @@ function App({ session, onSignOut }) {
                           </button>
                         ) : (
                           <small>
-                            Awaiting{" "}
-                            {o.status === "confirmed" ? "dispatch" : "receipt"}
+                            {o.status === "submitted"
+                              ? user?.role === "supplier"
+                                ? "You won this order. Prepare it for fulfilment."
+                                : "Order awarded. Supplier is preparing fulfilment."
+                              : o.status === "accepted"
+                                ? "Supplier accepted. Awaiting dispatch."
+                                : o.status === "dispatched"
+                                  ? "Awaiting shop receipt."
+                                  : o.status === "completed"
+                                    ? "Order completed."
+                                    : "Order in progress."}
                           </small>
                         )}
                       </div>
                     ))}
-                    {user?.role === "supplier" && o.status === "confirmed" && (
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          act(
-                            () => api(`/orders/${o.id}/dispatch`, {}),
-                            "Dispatch recorded. Shops can confirm receipt.",
-                          )
-                        }
-                      >
-                        Mark dispatched
-                      </button>
-                    )}
+                    {user?.role === "supplier" &&
+                      ["submitted", "accepted"].includes(o.status) && (
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            act(
+                              () => api(`/orders/${o.id}/dispatch`, {}),
+                              "Dispatch recorded. Shops can confirm receipt.",
+                            )
+                          }
+                        >
+                          Mark dispatched
+                        </button>
+                      )}
                   </article>
                 ))}
               </div>

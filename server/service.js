@@ -234,8 +234,131 @@ export function service(db, clock = () => new Date()) {
       });
     },
 
-    async award() {
-      throw new Fault(501, "Awarding public-schema auctions is not wired yet");
+    async award(u, id) {
+      requireRole(u, "admin");
+      return db.transaction(async (tx) => {
+        const auction = await one(
+          tx,
+          `SELECT * FROM public.auctions WHERE id=$1 FOR UPDATE`,
+          [id],
+        );
+        if (auction.status !== "open")
+          throw new Fault(409, "This auction has already been awarded");
+        if (clock() < new Date(auction.closes_at))
+          throw new Fault(409, "Wait for bidding to close before awarding");
+
+        const winningBid = (
+          await tx.query(
+            `SELECT *
+             FROM public.bids
+             WHERE auction_id=$1
+             ORDER BY unit_price ASC, created_at ASC, id ASC
+             LIMIT 1
+             FOR UPDATE`,
+            [id],
+          )
+        ).rows[0];
+        if (!winningBid) throw new Fault(409, "No supplier bids to award");
+
+        const subtotal = Number(winningBid.unit_price) * Number(auction.quantity);
+        const supplierFeeRate = 10;
+        const supplierFeeAmount = subtotal * (supplierFeeRate / 100);
+        const supplierPayout = subtotal - supplierFeeAmount;
+
+        const order = (
+          await tx.query(
+            `INSERT INTO public.bulk_orders(
+              group_id,
+              supplier_id,
+              auction_id,
+              winning_bid_id,
+              subtotal,
+              supplier_fee_rate,
+              supplier_fee_amount,
+              supplier_payout,
+              status
+            )
+            VALUES($1, $2, $3, $4, $5, $6, $7, $8, 'submitted')
+            RETURNING *`,
+            [
+              auction.group_id,
+              winningBid.supplier_id,
+              auction.id,
+              winningBid.id,
+              subtotal,
+              supplierFeeRate,
+              supplierFeeAmount,
+              supplierPayout,
+            ],
+          )
+        ).rows[0];
+
+        await tx.query(
+          `INSERT INTO public.bulk_order_items(
+            bulk_order_id, product_id, quantity, unit_price, line_total
+          )
+          VALUES($1, $2, $3, $4, $5)`,
+          [
+            order.id,
+            auction.product_id,
+            auction.quantity,
+            winningBid.unit_price,
+            subtotal,
+          ],
+        );
+
+        const requests = (
+          await tx.query(
+            `SELECT r.*
+             FROM public.auction_requests ar
+             JOIN public.requests r ON r.id = ar.request_id
+             WHERE ar.auction_id=$1
+             FOR UPDATE OF r`,
+            [id],
+          )
+        ).rows;
+
+        for (const request of requests) {
+          const actualCost = Number(winningBid.unit_price) * Number(request.quantity);
+          const savingsAmount = Math.max(
+            Number(request.committed_amount) - actualCost,
+            0,
+          );
+          await tx.query(
+            `INSERT INTO public.allocations(
+              bulk_order_id, request_id, quantity, actual_cost, savings_amount
+            )
+            VALUES($1, $2, $3, $4, $5)`,
+            [
+              order.id,
+              request.id,
+              request.quantity,
+              actualCost,
+              savingsAmount,
+            ],
+          );
+          await tx.query(
+            `UPDATE public.requests SET status='ordered' WHERE id=$1`,
+            [request.id],
+          );
+        }
+
+        await tx.query(
+          `UPDATE public.auctions SET status='awarded' WHERE id=$1`,
+          [id],
+        );
+        await tx.query(
+          `UPDATE public.purchasing_groups SET status='ordered' WHERE id=$1`,
+          [auction.group_id],
+        );
+
+        return {
+          ...order,
+          total_cents: Math.round(subtotal * 100),
+          supplier_fee_cents: Math.round(supplierFeeAmount * 100),
+          supplier_payout_cents: Math.round(supplierPayout * 100),
+        };
+      });
     },
 
     async orders(u) {
@@ -248,7 +371,9 @@ export function service(db, clock = () => new Date()) {
           COALESCE(MAX(ss.location), '') AS area,
           COALESCE(MAX(p.product_name), 'Bulk order') AS name,
           COALESCE(MAX(p.unit), 'pack') AS pack,
-          ROUND(MAX(bo.subtotal) * 100)::integer AS total_cents
+          ROUND(MAX(bo.subtotal) * 100)::integer AS total_cents,
+          ROUND(MAX(bo.supplier_fee_amount) * 100)::integer AS supplier_fee_cents,
+          ROUND(MAX(bo.supplier_payout) * 100)::integer AS supplier_payout_cents
          FROM public.bulk_orders bo
          LEFT JOIN public.bulk_order_items i ON i.bulk_order_id = bo.id
          LEFT JOIN public.products p ON p.id = i.product_id
@@ -261,15 +386,110 @@ export function service(db, clock = () => new Date()) {
          ORDER BY bo.created_at DESC`,
         [u.role, u.id],
       );
-      return result.rows.map((o) => ({ ...o, allocations: [] }));
+      const orders = result.rows;
+      for (const order of orders) {
+        order.allocations = (
+          await db.query(
+            `SELECT
+              a.request_id,
+              a.quantity,
+              ss.shop_name,
+              ROUND(a.actual_cost * 100)::integer AS charge_cents,
+              ROUND(a.savings_amount * 100)::integer AS savings_cents,
+              CASE WHEN r.status='fulfilled' THEN a.created_at ELSE NULL END AS received_at
+             FROM public.allocations a
+             JOIN public.requests r ON r.id = a.request_id
+             JOIN public.group_members gm ON gm.id = r.group_member_id
+             JOIN public.spaza_shops ss ON ss.id = gm.shop_id
+             WHERE a.bulk_order_id=$1
+               AND ($2='admin' OR ss.owner_id=$3 OR EXISTS (
+                 SELECT 1
+                 FROM public.bulk_orders bo
+                 JOIN public.suppliers su ON su.id = bo.supplier_id
+                 WHERE bo.id=a.bulk_order_id AND su.owner_id=$3
+               ))
+             ORDER BY ss.shop_name`,
+            [order.id, u.role, u.id],
+          )
+        ).rows;
+      }
+      return orders;
     },
 
-    async dispatch() {
-      throw new Fault(501, "Dispatch is not wired to the public schema yet");
+    async dispatch(u, id) {
+      requireRole(u, "supplier");
+      return db.transaction(async (tx) => {
+        const supplier = await currentSupplier(tx, u.id);
+        const order = await one(
+          tx,
+          `SELECT * FROM public.bulk_orders WHERE id=$1 FOR UPDATE`,
+          [id],
+        );
+        if (order.supplier_id !== supplier.id)
+          throw new Fault(403, "Only the winning supplier can dispatch this order");
+        if (!['submitted', 'accepted'].includes(order.status))
+          throw new Fault(409, "This order cannot be dispatched now");
+        return (
+          await tx.query(
+            `UPDATE public.bulk_orders
+             SET status='accepted'
+             WHERE id=$1
+             RETURNING *`,
+            [id],
+          )
+        ).rows[0];
+      });
     },
 
-    async receive() {
-      throw new Fault(501, "Receipt is not wired to the public schema yet");
+    async receive(u, requestId) {
+      requireRole(u, "shop");
+      return db.transaction(async (tx) => {
+        const allocation = await one(
+          tx,
+          `SELECT a.*, bo.id AS order_id, bo.status AS order_status
+           FROM public.allocations a
+           JOIN public.bulk_orders bo ON bo.id = a.bulk_order_id
+           JOIN public.requests r ON r.id = a.request_id
+           JOIN public.group_members gm ON gm.id = r.group_member_id
+           JOIN public.spaza_shops ss ON ss.id = gm.shop_id
+           WHERE a.request_id=$1 AND ss.owner_id=$2
+           FOR UPDATE OF r, bo`,
+          [requestId, u.id],
+        );
+        if (!['accepted', 'completed'].includes(allocation.order_status))
+          throw new Fault(409, "This order has not been dispatched yet");
+
+        await tx.query(
+          `UPDATE public.requests SET status='fulfilled' WHERE id=$1`,
+          [requestId],
+        );
+
+        const remaining = (
+          await tx.query(
+            `SELECT COUNT(*)::integer AS count
+             FROM public.allocations a
+             JOIN public.requests r ON r.id = a.request_id
+             WHERE a.bulk_order_id=$1 AND r.status <> 'fulfilled'`,
+            [allocation.order_id],
+          )
+        ).rows[0].count;
+
+        if (remaining === 0) {
+          await tx.query(
+            `UPDATE public.bulk_orders SET status='completed' WHERE id=$1`,
+            [allocation.order_id],
+          );
+          await tx.query(
+            `UPDATE public.purchasing_groups g
+             SET status='completed'
+             FROM public.bulk_orders bo
+             WHERE bo.id=$1 AND g.id=bo.group_id`,
+            [allocation.order_id],
+          );
+        }
+
+        return { request_id: requestId, received_at: clock().toISOString() };
+      });
     },
   };
 }
