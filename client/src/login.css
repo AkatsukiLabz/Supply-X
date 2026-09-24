@@ -1,0 +1,357 @@
+/* SupplyX login page. Uses the same colours and fonts as style.css. */
+.login {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.1fr);
+  min-height: 100vh;
+  background: #f7f8f4;
+}
+
+/* ---------- left brand panel ---------- */
+.login-brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 44px 52px;
+  background: #194f3d;
+  color: #fff;
+}
+.login-brand::before,
+.login-brand::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.login-brand::before {
+  width: 420px;
+  height: 420px;
+  right: -160px;
+  top: -120px;
+  background: rgba(156, 175, 87, 0.22);
+}
+.login-brand::after {
+  width: 260px;
+  height: 260px;
+  left: -90px;
+  bottom: -90px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.login-logo,
+.login-logo i {
+  color: #fff !important;
+}
+.login-pitch {
+  position: relative;
+  z-index: 1;
+  max-width: 420px;
+}
+.login-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.login-pitch h2 {
+  font-size: 44px;
+  line-height: 1.05;
+  margin: 18px 0 14px;
+  color: #fff;
+}
+.login-pitch p {
+  color: rgba(255, 255, 255, 0.78);
+  margin: 0 0 26px;
+}
+.login-pitch ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.login-pitch li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+}
+.login-pitch li b {
+  font-size: 11px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #9caf57;
+  color: #183b31;
+}
+.login-foot {
+  position: relative;
+  z-index: 1;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ---------- right form panel ---------- */
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+.login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 16px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0;
+}
+.login-card h1 {
+  margin: 0;
+  font-size: 32px;
+}
+.login-card label {
+  flex: none;
+}
+.login-card input {
+  width: 100%;
+  padding: 12px;
+}
+.login-card input:focus {
+  outline: 2px solid #9caf57;
+  outline-offset: 1px;
+  border-color: #9caf57;
+}
+.login-sub {
+  margin: -8px 0 4px;
+}
+
+.role-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #e8ede4;
+}
+.role-picker button {
+  font-size: 14px;
+  padding: 10px;
+  background: transparent;
+  color: #4d6259;
+}
+.role-picker button:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+.role-picker button.selected {
+  background: #fff;
+  color: #183b31;
+  box-shadow: 0 1px 3px rgba(24, 59, 49, 0.15);
+}
+.role-hint {
+  margin: -8px 0 0;
+  font-size: 13px;
+}
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+button.link {
+  background: none;
+  padding: 0;
+  color: #28654f;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+button.link:hover {
+  background: none;
+  color: #194f3d;
+}
+.password-field {
+  position: relative;
+  display: block;
+}
+.password-field input {
+  padding-right: 68px;
+}
+.password-field .toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  font-size: 12px;
+  background: #eef2ea;
+  color: #183b31;
+}
+.password-field .toggle:hover {
+  background: #e1e8da;
+}
+
+.login-card label.remember {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+.login-card label.remember input {
+  width: 18px;
+  height: 18px;
+  accent-color: #194f3d;
+}
+
+.login-card .message {
+  margin: 0;
+}
+.login-submit {
+  font-size: 15px !important;
+  padding: 14px 18px;
+}
+.login-help {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- demo helper ---------- */
+.demo-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1px dashed #c9d4c6;
+  border-radius: 10px;
+  background: #fff;
+}
+.demo-box code {
+  font-weight: 700;
+  color: #183b31;
+}
+.demo-box ul {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: grid;
+  gap: 6px;
+}
+.demo-box li button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background: #f4f6f1;
+  color: #183b31;
+}
+.demo-box li button:hover {
+  background: #e8ede4;
+}
+.demo-box em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7b73;
+}
+
+/* ---------- signed in bar (used in main.jsx) ---------- */
+.signed-in {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.signed-in .who {
+  text-align: right;
+  font-size: 13px;
+}
+.signed-in .who strong {
+  display: block;
+  color: #183b31;
+}
+.signed-in button {
+  font-size: 12px;
+  padding: 9px 14px;
+}
+
+/* ---------- small screens ---------- */
+@media (max-width: 860px) {
+  .login {
+    grid-template-columns: 1fr;
+  }
+  .login-brand {
+    padding: 28px 20px;
+    gap: 20px;
+  }
+  .login-pitch h2 {
+    font-size: 30px;
+  }
+  .login-pitch p,
+  .login-pitch ul,
+  .login-foot {
+    display: none;
+  }
+  .login-panel {
+    padding: 28px 16px 40px;
+  }
+}
+
+/* ---------- sign up page ---------- */
+.role-picker.two {
+  grid-template-columns: repeat(2, 1fr);
+}
+.login-card select {
+  width: 100%;
+  padding: 12px;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.login-card .invalid {
+  border-color: #c16642;
+  background: #fffaf7;
+}
+.field-error {
+  font-size: 12px;
+  font-weight: 500;
+  color: #a2472a;
+}
+.signup-done {
+  text-align: center;
+  align-items: center;
+}
+.signup-done .message {
+  text-align: left;
+}
+.signup-done .login-submit {
+  width: 100%;
+}
+.done-icon {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f1df;
+  color: #194f3d;
+  font-size: 28px;
+  font-weight: 700;
+}
+@media (max-width: 520px) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+}

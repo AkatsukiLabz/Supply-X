@@ -1,14 +1,33 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import Login from "./Login.jsx";
+import Signup from "./Signup.jsx";
+import { loadSession, clearSession, authHeaders, roleLabel } from "./auth.js";
 const money = (c) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(
     c / 100,
   );
-function App() {
-  const [users, setUsers] = useState([]),
-    [userId, setUserId] = useState(""),
-    [data, setData] = useState({
+function Root() {
+  const [session, setSession] = useState(() => loadSession());
+  const [page, setPage] = useState("login");
+  const signOut = () => {
+    clearSession();
+    setSession(null);
+  };
+  if (!session)
+    return page === "signup" ? (
+      <Signup onShowLogin={() => setPage("login")} />
+    ) : (
+      <Login onSignIn={setSession} onShowSignup={() => setPage("signup")} />
+    );
+  return <App session={session} onSignOut={signOut} />;
+}
+function App({ session, onSignOut }) {
+  const user = session.user,
+    userId = user.id,
+    mode = session.mode;
+  const [data, setData] = useState({
       products: [],
       requests: [],
       auctions: [],
@@ -18,15 +37,18 @@ function App() {
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("Overview"),
-    [selected, setSelected] = useState([]),
-    [mode, setMode] = useState("");
-  const user = users.find((u) => u.id === userId);
-  const api = async (path, body, id = userId) => {
+    [selected, setSelected] = useState([]);
+  const api = async (path, body) => {
     const r = await fetch("/api" + path, {
       method: body === undefined ? "GET" : "POST",
-      headers: { "Content-Type": "application/json", "x-demo-user": id },
+      headers: { "Content-Type": "application/json", ...authHeaders(session) },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
+    // Session expired or account removed: go back to the login screen.
+    if (r.status === 401) {
+      onSignOut();
+      throw Error("Your session has ended. Please sign in again.");
+    }
     const result = await r.json();
     if (!r.ok)
       throw Error(
@@ -37,26 +59,9 @@ function App() {
       );
     return result;
   };
-  useEffect(() => {
-    (async () => {
-      try {
-        const h = await api("/health");
-        setMode(h.mode);
-        if (h.mode === "demo") {
-          const list = await api("/demo-users");
-          setUsers(list);
-          setUserId(list.find((u) => u.role === "shop").id);
-        }
-      } catch (e) {
-        setError(e.message);
-      }
-    })();
-  }, []);
-  async function load(id) {
+  async function load() {
     const [products, requests, auctions, orders] = await Promise.all(
-      ["/products", "/requests", "/auctions", "/orders"].map((p) =>
-        api(p, undefined, id),
-      ),
+      ["/products", "/requests", "/auctions", "/orders"].map((p) => api(p)),
     );
     return { products, requests, auctions, orders };
   }
@@ -67,7 +72,7 @@ function App() {
     setError("");
     if (userId) {
       setBusy(true);
-      load(userId)
+      load()
         .then((x) => {
           if (active) setData(x);
         })
@@ -88,7 +93,7 @@ function App() {
     setNotice("");
     try {
       await fn();
-      setData(await load(userId));
+      setData(await load());
       setSelected([]);
       setNotice(message);
     } catch (e) {
@@ -155,32 +160,16 @@ function App() {
                   : "Connect to your SupplyX workspace."}
               </p>
             </div>
-            {mode === "demo" && (
-              <label className="account">
-                Demo account
-                <select
-                  value={userId}
-                  disabled={busy}
-                  onChange={(e) => {
-                    setUserId(e.target.value);
-                    setNotice("");
-                  }}
-                >
-                  {users.map((u) => (
-                    <option value={u.id} key={u.id}>
-                      {u.name} · {u.role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-          {mode === "supabase" && (
-            <div className="message">
-              This starter dashboard uses local demo accounts. Connect the
-              team’s Supabase sign-in frontend to the API for real accounts.
+            <div className="signed-in">
+              <div className="who">
+                <strong>{user.name}</strong>
+                <small>{roleLabel(user.role)} account</small>
+              </div>
+              <button className="secondary" onClick={onSignOut}>
+                Sign out
+              </button>
             </div>
-          )}
+          </div>
           {error && (
             <div role="alert" className="message error">
               {error}
@@ -608,4 +597,4 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(<Root />);
