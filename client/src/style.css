@@ -948,3 +948,51 @@ a:focus-visible {
   line-height: 1.55;
   margin: 3px 0;
 }
+
+
+.bid-tracker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.tracker-step {
+  background: #f4f7f0;
+  border: 1px solid #e0e8d9;
+  border-radius: 999px;
+  color: #738179;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
+.tracker-step.done {
+  background: #edf6e6;
+  border-color: #d1e3c4;
+  color: #456c3f;
+}
+
+.tracker-step.won {
+  background: #fff3c4;
+  border-color: #f0dda0;
+  color: #7a5815;
+}
+
+.tracker-step.lost {
+  background: #ffe5df;
+  border-color: #f3c4ba;
+  color: #983b2b;
+}
+
+.tracker-step.waiting {
+  background: #e8f3f7;
+  border-color: #c8dde5;
+  color: #386272;
+}
+
+.tracker-step.urgent {
+  background: #fff0dc;
+  border-color: #efc994;
+  color: #945f18;
+}

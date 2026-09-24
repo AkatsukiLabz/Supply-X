@@ -219,6 +219,31 @@ function App({ session, onSignOut }) {
     if (auctionState(auction) === "awarded") return "lost";
     return null;
   };
+  const bidTrackerSteps = (auction) => {
+    const order = data.orders.find((o) => o.auction_id === auction.id);
+    const result = bidResult(auction);
+    if (result === "won")
+      return [
+        { label: "Won", done: true, tone: "won" },
+        {
+          label:
+            order?.status === "completed"
+              ? "Completed"
+              : order?.status === "accepted" || order?.status === "dispatched"
+                ? "Waiting for receipt"
+                : "Dispatch required",
+          done: Boolean(order),
+          tone:
+            order?.status === "completed"
+              ? "won"
+              : order?.status === "accepted" || order?.status === "dispatched"
+                ? "waiting"
+                : "urgent",
+        },
+      ];
+    if (result === "lost") return [{ label: "Lost", done: true, tone: "lost" }];
+    return [{ label: "Result pending", done: false }];
+  };
   const renderAuctionCards = (auctions) => (
     <div className="cards">
       {auctions.map((a) => {
@@ -275,10 +300,23 @@ function App({ session, onSignOut }) {
                   {user?.role === "supplier" ? "Your bid" : "Bids after close"}: {" "}
                   {a.bids.map((b) => money(b.total_cents)).join(" · ")}
                 </p>
-                {activeTab === "My bids" && bidResult(a) && (
-                  <span className={`result-pill ${bidResult(a)}`}>
-                    {bidResult(a) === "won" ? "Won" : "Lost"}
-                  </span>
+                {activeTab === "My bids" && (
+                  <div className="bid-tracker">
+                    {bidTrackerSteps(a).map((step) => (
+                      <span
+                        key={step.label}
+                        className={[
+                          "tracker-step",
+                          step.done ? "done" : "",
+                          step.tone || "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        {step.label}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </>
             )}
