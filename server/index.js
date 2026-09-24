@@ -16,7 +16,14 @@ const db = await database({
   path: fileURLToPath(new URL("../.data/postgres", import.meta.url)),
 });
 if (mode === "demo") await seed(db);
-const app = createApp(db, { mode, supabaseUrl: process.env.SUPABASE_URL });
+const app = createApp(db, {
+  mode,
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabasePublishableKey:
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY,
+});
 app.use(express.static(fileURLToPath(new URL("../dist", import.meta.url))));
 const port = Number(process.env.PORT || 3001),
   host = mode === "demo" ? "127.0.0.1" : "0.0.0.0";

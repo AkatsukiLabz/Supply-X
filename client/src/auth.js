@@ -52,11 +52,20 @@ export const DEMO_ACCOUNTS = [
 ];
 
 const KEY = "supplyx.session";
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(
+let runtimeConfig = {};
+const viteSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(
   /\/$/,
   "",
 );
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const viteSupabaseKey =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  "";
+
+const supabaseConfig = () => ({
+  url: viteSupabaseUrl || runtimeConfig.supabaseUrl || "",
+  key: viteSupabaseKey || runtimeConfig.supabasePublishableKey || "",
+});
 
 // ---------- session storage ----------
 
@@ -109,7 +118,12 @@ export function authHeaders(session) {
 export async function getMode() {
   const r = await fetch("/api/health");
   if (!r.ok) throw Error("SupplyX is not reachable right now. Try again soon.");
-  return (await r.json()).mode;
+  const health = await r.json();
+  runtimeConfig = {
+    supabaseUrl: (health.supabaseUrl || "").replace(/\/$/, ""),
+    supabasePublishableKey: health.supabasePublishableKey || "",
+  };
+  return health.mode;
 }
 
 async function fetchProfile(headers) {
@@ -135,22 +149,26 @@ export async function signIn({ email, password, role, mode }) {
     const user = await fetchProfile({ "x-demo-user": account.id });
     session = { mode, user };
   } else {
-    if (!SUPABASE_URL || !SUPABASE_KEY)
+    const { url, key } = supabaseConfig();
+    if (!url || !key)
       throw Error(
-        "Sign in is not set up yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.",
+        "Sign in is not set up yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to your .env file.",
       );
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
       method: "POST",
-      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+      headers: { apikey: key, "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
     const body = await r.json().catch(() => ({}));
-    if (!r.ok)
-      throw Error(
-        r.status === 400
-          ? "Incorrect email or password."
-          : body.msg || body.error_description || "Sign in failed. Try again.",
-      );
+    if (!r.ok) {
+      const message = body.msg || body.error_description || body.error || "";
+      const lower = message.toLowerCase();
+      if (lower.includes("email not confirmed"))
+        throw Error("Please confirm your email in Supabase before signing in.");
+      if (lower.includes("invalid login credentials"))
+        throw Error("Incorrect email or password.");
+      throw Error(message || "Sign in failed. Try again.");
+    }
     const token = body.access_token;
     const user = await fetchProfile({ Authorization: `Bearer ${token}` });
     session = {
@@ -177,11 +195,12 @@ export async function requestPasswordReset(email, mode) {
     return `Demo accounts all use the password ${DEMO_PASSWORD}.`;
   if (!email)
     throw Error("Type your email above first, then click Forgot password.");
-  if (!SUPABASE_URL || !SUPABASE_KEY)
+  const { url, key } = supabaseConfig();
+  if (!url || !key)
     throw Error("Password reset is not set up yet.");
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+  const r = await fetch(`${url}/auth/v1/recover`, {
     method: "POST",
-    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    headers: { apikey: key, "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
   });
   if (!r.ok) throw Error("We could not send a reset link. Try again soon.");
@@ -238,14 +257,15 @@ export async function signUp(f, mode) {
     return { demo: true, email };
   }
 
-  if (!SUPABASE_URL || !SUPABASE_KEY)
+  const { url, key } = supabaseConfig();
+  if (!url || !key)
     throw Error(
-      "Sign up is not set up yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.",
+      "Sign up is not set up yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to your .env file.",
     );
 
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+  const r = await fetch(`${url}/auth/v1/signup`, {
     method: "POST",
-    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    headers: { apikey: key, "Content-Type": "application/json" },
     body: JSON.stringify({
       email,
       password: f.password,

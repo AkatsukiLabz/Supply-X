@@ -9,7 +9,15 @@ export function createApp(db, config = {}) {
     s = service(db, config.clock),
     mode = config.mode || "demo";
   app.disable("x-powered-by");
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          connectSrc: ["'self'", config.supabaseUrl].filter(Boolean),
+        },
+      },
+    }),
+  );
   app.use(express.json({ limit: "16kb" }));
   // Block cross-site browser writes; production frontend/API should share an origin.
   app.use("/api", (req, res, next) => {
@@ -24,7 +32,12 @@ export function createApp(db, config = {}) {
   });
   app.get("/api/health", async (req, res) => {
     await db.query("SELECT 1");
-    res.json({ status: "ok", mode });
+    res.json({
+      status: "ok",
+      mode,
+      supabaseUrl: config.supabaseUrl || null,
+      supabasePublishableKey: config.supabasePublishableKey || null,
+    });
   });
   if (mode === "demo")
     app.get("/api/demo-users", async (req, res) =>
@@ -40,7 +53,19 @@ export function createApp(db, config = {}) {
   app.get("/api/me", (req, res) => res.json(req.user));
   app.get("/api/products", async (req, res) =>
     res.json(
-      (await db.query("SELECT * FROM supplyx.products ORDER BY name")).rows,
+      (
+        await db.query(
+          `SELECT
+            id,
+            product_name AS name,
+            unit AS pack,
+            ROUND(market_unit_price * 100)::integer AS reference_cents,
+            COALESCE(market_price_source, 'Market reference') AS reference_source,
+            market_price_date AS reference_date
+           FROM public.products
+           ORDER BY product_name`,
+        )
+      ).rows,
     ),
   );
   app.get("/api/requests", async (req, res) =>
