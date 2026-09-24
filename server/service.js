@@ -222,6 +222,21 @@ export function service(db, clock = () => new Date()) {
         );
         if (auction.status !== "open" || clock() >= new Date(auction.closes_at))
           throw new Fault(409, "Bidding is closed");
+        const benchmark = (
+          await tx.query(
+            `SELECT ROUND(SUM(r.committed_amount) * 100)::integer AS total_cents
+             FROM public.auction_requests ar
+             JOIN public.requests r ON r.id = ar.request_id
+             WHERE ar.auction_id=$1`,
+            [id],
+          )
+        ).rows[0];
+        const benchmarkCents = Number(benchmark?.total_cents || 0);
+        if (benchmarkCents > 0 && totalCents >= benchmarkCents)
+          throw new Fault(
+            400,
+            `Bid must be below the retail benchmark total of R ${(benchmarkCents / 100).toFixed(2)}`,
+          );
         const unitPrice = totalCents / 100 / Number(auction.quantity);
         return (
           await tx.query(
