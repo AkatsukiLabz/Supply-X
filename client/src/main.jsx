@@ -231,12 +231,44 @@ function App({ session, onSignOut }) {
               <span>{a.area}</span>
             </div>
             <h2>{a.name}</h2>
-            <p>
-              {a.quantity} × {a.pack}
-            </p>
-            <p className="muted auction-time">
-              {state === "open" ? "Closes" : "Closed"} {dateTimeNoSeconds(a.closes_at)}
-            </p>
+            {user?.role === "supplier" && state === "open" ? (
+              <div className="opportunity-summary">
+                <div>
+                  <span>Total quantity</span>
+                  <strong>
+                    {a.quantity} × {a.pack}
+                  </strong>
+                </div>
+                <div>
+                  <span>Area</span>
+                  <strong>{a.area || "Your service area"}</strong>
+                </div>
+                <div>
+                  <span>Closes</span>
+                  <strong>{dateTimeNoSeconds(a.closes_at)}</strong>
+                </div>
+                {a.retail_benchmark_cents > 0 && (
+                  <div>
+                    <span>Retail benchmark</span>
+                    <strong>{money(a.retail_benchmark_cents)}</strong>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <p>
+                  {a.quantity} × {a.pack}
+                </p>
+                <p className="muted auction-time">
+                  {state === "open" ? "Closes" : "Closed"} {dateTimeNoSeconds(a.closes_at)}
+                </p>
+              </>
+            )}
+            {user?.role === "supplier" && state === "open" && (
+              <p className="opportunity-fit">
+                Matches your service area. Submit a delivered total below the retail benchmark to stay competitive.
+              </p>
+            )}
             {a.bids.length > 0 && (
               <>
                 <p>

@@ -129,13 +129,17 @@ export function service(db, clock = () => new Date()) {
           a.created_at,
           p.product_name AS name,
           p.unit AS pack,
-          COALESCE(MAX(s.location), MAX(su.location), '') AS area
+          COALESCE(MAX(s.location), MAX(su.location), '') AS area,
+          COUNT(DISTINCT s.id)::integer AS shop_count,
+          ROUND(COALESCE(SUM(DISTINCT r.committed_amount), 0) * 100)::integer AS retail_benchmark_cents
          FROM public.auctions a
          JOIN public.products p ON p.id = a.product_id
          LEFT JOIN public.purchasing_groups g ON g.id = a.group_id
          LEFT JOIN public.group_members gm ON gm.group_id = g.id
          LEFT JOIN public.spaza_shops s ON s.id = gm.shop_id
          LEFT JOIN public.suppliers su ON su.owner_id = $2
+         LEFT JOIN public.auction_requests ar ON ar.auction_id = a.id
+         LEFT JOIN public.requests r ON r.id = ar.request_id
          WHERE ($1='admin' OR ($1='supplier' AND COALESCE(s.location, su.location, '')=$3) OR s.owner_id=$2)
          GROUP BY a.id, p.product_name, p.unit
          ORDER BY a.created_at DESC`,
