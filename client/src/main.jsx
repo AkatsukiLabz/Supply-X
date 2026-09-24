@@ -8,6 +8,59 @@ const money = (c) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(
     c / 100,
   );
+
+const parseRandCents = (value) => {
+  const normalized = String(value).replace(/[^0-9,.]/g, "").replace(",", ".");
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+};
+
+const dateTimeNoSeconds = (value) =>
+  new Intl.DateTimeFormat("en-ZA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+
+const tabsForRole = (role) =>
+  role === "supplier"
+    ? ["Overview", "Available auctions", "My bids"]
+    : ["Overview", "Stock requests", "Auctions", "Orders"];
+
+const tabIcon = {
+  Overview: "◫",
+  "Stock requests": "▤",
+  Auctions: "⇄",
+  Orders: "▣",
+  "Available auctions": "⇄",
+  "My bids": "◧",
+};
+
+const pageCopy = (role, tab) => {
+  if (role === "supplier") {
+    const title =
+      tab === "Overview"
+        ? "Supplier workspace"
+        : tab === "Available auctions"
+          ? "Available auctions"
+          : "My bids";
+    return { eyebrow: "SUPPLIER PORTAL", title };
+  }
+  return {
+    eyebrow: "INDEPENDENT SHOPS. SHARED OPPORTUNITY.",
+    title: tab === "Overview" ? "Let’s grow together." : tab,
+  };
+};
+
+const auctionState = (auction) =>
+  auction.status === "awarded"
+    ? "awarded"
+    : Date.now() >= new Date(auction.closes_at).getTime()
+      ? "closed"
+      : auction.status;
 function Root() {
   const [session, setSession] = useState(() => loadSession());
   const [page, setPage] = useState("login");
@@ -37,7 +90,9 @@ function App({ session, onSignOut }) {
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("Overview"),
-    [selected, setSelected] = useState([]);
+    [selected, setSelected] = useState([]),
+    [selectedAuctionId, setSelectedAuctionId] = useState(null),
+    [, setClockTick] = useState(() => Date.now());
   const api = async (path, body) => {
     const r = await fetch("/api" + path, {
       method: body === undefined ? "GET" : "POST",
@@ -60,6 +115,12 @@ function App({ session, onSignOut }) {
     return result;
   };
   async function load() {
+    if (user?.role === "supplier") {
+      const [auctions, orders] = await Promise.all(
+        ["/auctions", "/orders"].map((p) => api(p)),
+      );
+      return { products: [], requests: [], auctions, orders };
+    }
     const [products, requests, auctions, orders] = await Promise.all(
       ["/products", "/requests", "/auctions", "/orders"].map((p) => api(p)),
     );
@@ -87,6 +148,12 @@ function App({ session, onSignOut }) {
       active = false;
     };
   }, [userId]);
+  useEffect(() => {
+    if (user?.role !== "supplier") return undefined;
+    const id = window.setInterval(() => setClockTick(Date.now()), 10000);
+    return () => window.clearInterval(id);
+  }, [user?.role]);
+
   async function act(fn, message) {
     setBusy(true);
     setError("");
@@ -102,7 +169,266 @@ function App({ session, onSignOut }) {
       setBusy(false);
     }
   }
-  const open = data.auctions.filter((a) => a.status === "open").length;
+
+  async function submitSupplierBid(auctionId, totalCents) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const bid = await api(`/auctions/${auctionId}/bids`, { totalCents });
+      setData((current) => ({
+        ...current,
+        auctions: current.auctions.map((auction) =>
+          auction.id === auctionId ? { ...auction, bids: [bid] } : auction,
+        ),
+      }));
+      setSelectedAuctionId(null);
+      setNotice("Your private bid is saved. It moved to My bids.");
+      setTab("My bids");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const tabs = tabsForRole(user?.role);
+  const activeTab = tabs.includes(tab) ? tab : tabs[0];
+  const copy = pageCopy(user?.role, activeTab);
+  const open = data.auctions.filter((a) => auctionState(a) === "open").length;
+  const supplierBids = data.auctions.filter((a) => a.bids.length > 0);
+  const supplierWonOrders = data.orders;
+  const wonAuctionIds = new Set(data.orders.map((order) => order.auction_id));
+  const pendingSupplierOrders = data.orders.filter(
+    (order) => order.status === "submitted",
+  );
+  const dispatchedSupplierOrders = data.orders.filter(
+    (order) => order.status !== "submitted",
+  );
+  const availableSupplierAuctions = data.auctions.filter(
+    (auction) => auctionState(auction) === "open" && auction.bids.length === 0,
+  );
+  const shownAuctions = data.auctions.filter((a) => {
+    if (activeTab === "My bids") return a.bids.length > 0;
+    if (activeTab === "Available auctions")
+      return availableSupplierAuctions.some((auction) => auction.id === a.id);
+    return true;
+  });
+  const bidResult = (auction) => {
+    if (!auction.bids.length) return null;
+    if (wonAuctionIds.has(auction.id)) return "won";
+    if (auctionState(auction) === "awarded") return "lost";
+    return null;
+  };
+  const renderAuctionCards = (auctions) => (
+    <div className="cards">
+      {auctions.map((a) => {
+        const state = auctionState(a);
+        const closed = state === "closed" || state === "awarded";
+        return (
+          <article key={a.id}>
+            <div className="card-top">
+              <span className="pill">{state}</span>
+              <span>{a.area}</span>
+            </div>
+            <h2>{a.name}</h2>
+            <p>
+              {a.quantity} × {a.pack}
+            </p>
+            <p className="muted auction-time">
+              {state === "open" ? "Closes" : "Closed"} {dateTimeNoSeconds(a.closes_at)}
+            </p>
+            {a.bids.length > 0 && (
+              <>
+                <p>
+                  {user?.role === "supplier" ? "Your bid" : "Bids after close"}: {" "}
+                  {a.bids.map((b) => money(b.total_cents)).join(" · ")}
+                </p>
+                {activeTab === "My bids" && bidResult(a) && (
+                  <span className={`result-pill ${bidResult(a)}`}>
+                    {bidResult(a) === "won" ? "Won" : "Lost"}
+                  </span>
+                )}
+              </>
+            )}
+            {user?.role === "supplier" &&
+              a.status === "open" &&
+              !closed &&
+              a.bids.length === 0 &&
+              (selectedAuctionId === a.id ? (
+                <form
+                  className="bid-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const totalCents = parseRandCents(
+                      new FormData(e.currentTarget).get("total"),
+                    );
+                    submitSupplierBid(a.id, totalCents);
+                  }}
+                >
+                  <label>
+                    Total delivered price
+                    <span className="money-input">
+                      <span>R</span>
+                      <input
+                        name="total"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]+([,.][0-9]{1,2})?"
+                        placeholder="0.00"
+                        required
+                        autoFocus
+                      />
+                    </span>
+                  </label>
+                  <div className="bid-actions">
+                    <button disabled={busy}>Submit private bid</button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setSelectedAuctionId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  className="auction-join"
+                  onClick={() => setSelectedAuctionId(a.id)}
+                >
+                  Participate in auction
+                </button>
+              ))}
+            {user?.role === "admin" && a.status === "open" && (
+              <button
+                disabled={busy || !closed}
+                onClick={() =>
+                  act(
+                    () => api(`/auctions/${a.id}/award`, {}),
+                    "Lowest delivered bid awarded. The order is ready for the supplier.",
+                  )
+                }
+              >
+                {closed ? "Award lowest bid" : "Waiting for bids to close"}
+              </button>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+
+  const renderOrders = (orders) => (
+    <div className="cards">
+      {orders.map((o) => (
+        <article key={o.id}>
+          <div className="card-top">
+            <span className="pill">{o.status}</span>
+            <span>{o.area}</span>
+          </div>
+          <h2>{o.name}</h2>
+          {o.total_cents !== undefined && (
+            <p>
+              Total delivered price <strong>{money(o.total_cents)}</strong>
+            </p>
+          )}
+          {user?.role === "supplier" &&
+            o.supplier_payout_cents !== undefined && (
+              <p className="muted">
+                Supplier payout after SupplyX fee: {" "}
+                <strong>{money(o.supplier_payout_cents)}</strong>
+              </p>
+            )}
+          {user?.role === "admin" && o.supplier_fee_cents !== undefined && (
+            <p className="muted">
+              SupplyX supplier fee: <strong>{money(o.supplier_fee_cents)}</strong>
+            </p>
+          )}
+          {o.allocations.map((x) => (
+            <div className="allocation" key={x.request_id}>
+              <strong>{x.shop_name}</strong>
+              <p>
+                {x.quantity} × {o.pack} · {money(x.charge_cents)}
+              </p>
+              {user?.role !== "supplier" && x.savings_cents !== undefined && (
+                <small className="allocation-note">
+                  Shop saving: {money(x.savings_cents)}
+                </small>
+              )}
+              {x.received_at ? (
+                <span className="pill">Received</span>
+              ) : user?.role === "shop" &&
+                ["dispatched", "accepted"].includes(o.status) ? (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    act(
+                      () => api(`/allocations/${x.request_id}/receive`, {}),
+                      "Receipt confirmed for your shop.",
+                    )
+                  }
+                >
+                  Confirm receipt
+                </button>
+              ) : (
+                <small className="allocation-note">
+                  {o.status === "submitted"
+                    ? user?.role === "supplier"
+                      ? "You won this order. Prepare it for fulfilment."
+                      : "Order awarded. Supplier is preparing fulfilment."
+                    : o.status === "accepted"
+                      ? user?.role === "supplier"
+                        ? "Dispatched. Waiting for shop receipt."
+                        : "Supplier dispatched. Awaiting receipt."
+                      : o.status === "dispatched"
+                        ? "Awaiting shop receipt."
+                        : o.status === "completed"
+                          ? "Order completed."
+                          : "Order in progress."}
+                </small>
+              )}
+            </div>
+          ))}
+          {user?.role === "supplier" && o.status === "submitted" && (
+            <button
+              disabled={busy}
+              onClick={() =>
+                act(
+                  () => api(`/orders/${o.id}/dispatch`, {}),
+                  "Dispatch recorded. Shops can confirm receipt.",
+                )
+              }
+            >
+              Mark dispatched
+            </button>
+          )}
+        </article>
+      ))}
+    </div>
+  );
+  const renderSupplierOrderSections = () => (
+    <>
+      <div className="section-title split-heading">
+        <h2>Needs dispatch</h2>
+        <span>{pendingSupplierOrders.length} orders</span>
+      </div>
+      {pendingSupplierOrders.length ? (
+        renderOrders(pendingSupplierOrders)
+      ) : (
+        <p className="empty">No won orders waiting for dispatch.</p>
+      )}
+      <div className="section-title split-heading">
+        <h2>Dispatched / waiting for receipt</h2>
+        <span>{dispatchedSupplierOrders.length} orders</span>
+      </div>
+      {dispatchedSupplierOrders.length ? (
+        renderOrders(dispatchedSupplierOrders)
+      ) : (
+        <p className="empty">No dispatched orders yet.</p>
+      )}
+    </>
+  );
   return (
     <div className="layout">
       <aside>
@@ -112,26 +438,28 @@ function App({ session, onSignOut }) {
         </a>
         <div className="workspace">YOUR WORKSPACE</div>
         <nav>
-          {["Overview", "Stock requests", "Auctions", "Orders"].map((x, i) => (
+          {tabs.map((x) => (
             <button
-              className={tab === x ? "active" : ""}
+              className={activeTab === x ? "active" : ""}
               key={x}
               onClick={() => setTab(x)}
             >
-              <span>{["◫", "▤", "⇄", "▣"][i]}</span>
+              <span>{tabIcon[x]}</span>
               {x}
             </button>
           ))}
         </nav>
-        <div className="sidebar-note">
-          <div className="leaf">↗</div>
-          <strong>
-            Small shops.
-            <br />
-            Collective power.
-          </strong>
-          <p>Better buying starts with your community.</p>
-        </div>
+        {user?.role !== "supplier" && (
+          <div className="sidebar-note">
+            <div className="leaf">↗</div>
+            <strong>
+              Small shops.
+              <br />
+              Collective power.
+            </strong>
+            <p>Better buying starts with your community.</p>
+          </div>
+        )}
         <footer>
           Akatsuki Labs · SupplyX
           <br />
@@ -141,7 +469,7 @@ function App({ session, onSignOut }) {
       <main>
         <header>
           <span>
-            WORKSPACE <b>/ {tab}</b>
+            WORKSPACE <b>/ {activeTab}</b>
           </span>
           <span className="local">
             ● {mode === "demo" ? "LOCAL DEMO" : "CONNECTED API"}
@@ -150,10 +478,8 @@ function App({ session, onSignOut }) {
         <div className="content">
           <div className="heading">
             <div>
-              <div className="eyebrow">
-                INDEPENDENT SHOPS. SHARED OPPORTUNITY.
-              </div>
-              <h1>{tab === "Overview" ? "Let’s grow together." : tab}</h1>
+              <div className="eyebrow">{copy.eyebrow}</div>
+              <h1>{copy.title}</h1>
               <p>
                 {user
                   ? `${user.name} · ${user.area}`
@@ -180,99 +506,149 @@ function App({ session, onSignOut }) {
               {notice}
             </div>
           )}
-          {tab === "Overview" && (
+          {activeTab === "Overview" && (
             <>
-              <section className="hero">
-                <div>
-                  <span className="tag">BUY TOGETHER, GROW TOGETHER</span>
-                  <h2>
-                    Your next stock run.
-                    <br />A stronger deal.
-                  </h2>
-                  <p>
-                    Pool demand with nearby shops. Let suppliers compete.
-                    <br />
-                    Keep your business independent.
-                  </p>
-                  <button
-                    onClick={() =>
-                      setTab(
-                        user?.role === "shop" ? "Stock requests" : "Auctions",
-                      )
-                    }
-                  >
-                    {" "}
-                    {user?.role === "shop"
-                      ? "Request stock"
-                      : "Explore auctions"}{" "}
-                    <span>↗</span>
-                  </button>
-                </div>
-                <div className="hero-art" aria-hidden="true">
-                  <div className="circle c1"></div>
-                  <div className="circle c2"></div>
-                  <div className="box">SX</div>
-                  <small>
-                    LOCAL BUSINESSES
-                    <br />
-                    BIGGER POSSIBILITIES
-                  </small>
-                </div>
-              </section>
-              <section className="stats">
-                {[
-                  [data.requests.length, "Visible stock requests"],
-                  [open, "Open auctions"],
-                  [data.orders.length, "Your workspace orders"],
-                ].map(([v, l]) => (
-                  <article key={l}>
-                    <span>{l}</span>
-                    <strong>{String(v).padStart(2, "0")}</strong>
-                  </article>
-                ))}
-              </section>
-              <section className="intro">
-                <div>
-                  <span className="eyebrow">HOW IT WORKS</span>
-                  <h2>
-                    One community.
-                    <br />
-                    More buying power.
-                  </h2>
-                </div>
-                <ol>
-                  <li>
-                    <b>01</b>
+              {user?.role === "supplier" ? (
+                <>
+                  {pendingSupplierOrders.length > 0 ? (
+                    <section className="supplier-dashboard-grid">
+                      <div className="dashboard-main">
+                        <div className="section-title split-heading">
+                          <h2>Needs dispatch</h2>
+                          <span>{pendingSupplierOrders.length} orders</span>
+                        </div>
+                        {renderOrders(pendingSupplierOrders)}
+                      </div>
+                      <aside className="dashboard-side">
+                        <div className="section-title split-heading">
+                          <h2>Open auctions</h2>
+                          <span>{availableSupplierAuctions.length} open</span>
+                        </div>
+                        {availableSupplierAuctions.length ? (
+                          renderAuctionCards(availableSupplierAuctions)
+                        ) : (
+                          <p className="empty dashboard-empty">
+                            There are no open auctions right now. Open auctions will show here, check back in a few.
+                          </p>
+                        )}
+                      </aside>
+                    </section>
+                  ) : availableSupplierAuctions.length > 0 ? (
+                    <section className="overview-opportunities">
+                      <div className="section-title split-heading">
+                        <h2>Open auctions</h2>
+                        <span>{availableSupplierAuctions.length} open</span>
+                      </div>
+                      {renderAuctionCards(availableSupplierAuctions)}
+                    </section>
+                  ) : (
+                    <section className="supplier-empty-state">
+                      <div className="empty-icon">SX</div>
+                      <div>
+                        <p className="empty-kicker">No live opportunities</p>
+                        <h2>No open auctions right now.</h2>
+                        <p>
+                          New supplier opportunities will appear here once nearby
+                          shop demand is ready for bidding. Check back shortly.
+                        </p>
+                      </div>
+                    </section>
+                  )}
+                </>
+              ) : (
+                <>
+                  <section className="hero">
                     <div>
-                      <strong>Tell us what you need</strong>
-                      <p>Choose a product and the number of packs.</p>
-                    </div>
-                  </li>
-                  <li>
-                    <b>02</b>
-                    <div>
-                      <strong>Combine. Compare. Confirm.</strong>
+                      <span className="tag">BUY TOGETHER, GROW TOGETHER</span>
+                      <h2>
+                        Your next stock run.
+                        <br />A stronger deal.
+                      </h2>
                       <p>
-                        Nearby requests become one auction. Supplier bids stay
-                        private.
+                        Pool demand with nearby shops. Let suppliers compete.
+                        <br />
+                        Keep your business independent.
                       </p>
+                      <button
+                        onClick={() =>
+                          setTab(
+                            user?.role === "shop" ? "Stock requests" : "Auctions",
+                          )
+                        }
+                      >
+                        {user?.role === "shop"
+                          ? "Request stock"
+                          : "Explore auctions"}{" "}
+                        <span>↗</span>
+                      </button>
                     </div>
-                  </li>
-                  <li>
-                    <b>03</b>
+                    <div className="hero-art" aria-hidden="true">
+                      <div className="circle c1"></div>
+                      <div className="circle c2"></div>
+                      <div className="box">SX</div>
+                      <small>
+                        LOCAL BUSINESSES
+                        <br />
+                        BIGGER POSSIBILITIES
+                      </small>
+                    </div>
+                  </section>
+                  <section className="stats">
+                    {[
+                      [data.requests.length, "Visible stock requests"],
+                      [open, "Open auctions"],
+                      [data.orders.length, "Your workspace orders"],
+                    ].map(([v, l]) => (
+                      <article key={l}>
+                        <span>{l}</span>
+                        <strong>{String(v).padStart(2, "0")}</strong>
+                      </article>
+                    ))}
+                  </section>
+                  <section className="intro">
                     <div>
-                      <strong>Track your share</strong>
-                      <p>
-                        See your allocated cost and confirm when your stock
-                        arrives.
-                      </p>
+                      <span className="eyebrow">HOW IT WORKS</span>
+                      <h2>
+                        One community.
+                        <br />
+                        More buying power.
+                      </h2>
                     </div>
-                  </li>
-                </ol>
-              </section>
+                    <ol>
+                      <li>
+                        <b>01</b>
+                        <div>
+                          <strong>Tell us what you need</strong>
+                          <p>Choose a product and the number of packs.</p>
+                        </div>
+                      </li>
+                      <li>
+                        <b>02</b>
+                        <div>
+                          <strong>Combine. Compare. Confirm.</strong>
+                          <p>
+                            Nearby requests become one auction. Supplier bids
+                            stay private.
+                          </p>
+                        </div>
+                      </li>
+                      <li>
+                        <b>03</b>
+                        <div>
+                          <strong>Track your share</strong>
+                          <p>
+                            See your allocated cost and confirm when your stock
+                            arrives.
+                          </p>
+                        </div>
+                      </li>
+                    </ol>
+                  </section>
+                </>
+              )}
             </>
           )}
-          {tab === "Stock requests" && (
+          {activeTab === "Stock requests" && (
             <>
               <div className="section-title">
                 <h2>Stock for your next chapter</h2>
@@ -409,10 +785,10 @@ function App({ session, onSignOut }) {
               )}
             </>
           )}
-          {tab === "Auctions" && (
+          {(activeTab === "Auctions" || activeTab === "Available auctions" || activeTab === "My bids") && (
             <>
               <div className="section-title">
-                <h2>Shared demand, better possibilities</h2>
+                <h2>{user?.role === "supplier" ? activeTab : "Shared demand"}</h2>
                 <button
                   className="secondary"
                   disabled={busy}
@@ -422,192 +798,26 @@ function App({ session, onSignOut }) {
                 </button>
               </div>
               <p>
-                Each bid is the full delivered total in rand, including all
-                charges. No payments are collected in this demo.
+                {user?.role === "supplier"
+                  ? "Submit one private delivered total per open auction. Once you bid, it moves to My bids."
+                  : "Each supplier bid is the full delivered total in rand. No real payments are collected in this demo."}
               </p>
-              <div className="cards">
-                {data.auctions.map((a) => {
-                  const closed = Date.now() >= new Date(a.closes_at).getTime();
-                  return (
-                    <article key={a.id}>
-                      <div className="card-top">
-                        <span className="pill">
-                          {a.status === "awarded"
-                            ? "awarded"
-                            : closed
-                              ? "closed"
-                              : a.status}
-                        </span>
-                        <span>{a.area}</span>
-                      </div>
-                      <h2>{a.name}</h2>
-                      <p>
-                        {a.quantity} × {a.pack}
-                      </p>
-                      <p className="muted">
-                        Closes {new Date(a.closes_at).toLocaleString()}
-                      </p>
-                      {a.bids.length > 0 && (
-                        <p>
-                          {user?.role === "supplier"
-                            ? "Your bid"
-                            : "Bids after close"}
-                          :{" "}
-                          {a.bids.map((b) => money(b.total_cents)).join(" · ")}
-                        </p>
-                      )}
-                      {user?.role === "supplier" &&
-                        a.status === "open" &&
-                        !closed && (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              const totalCents = Math.round(
-                                Number(
-                                  new FormData(e.currentTarget).get("total"),
-                                ) * 100,
-                              );
-                              act(
-                                () =>
-                                  api(`/auctions/${a.id}/bids`, { totalCents }),
-                                "Your private bid is saved. You can revise it before closing.",
-                              );
-                            }}
-                          >
-                            <label>
-                              Total delivered price (R)
-                              <input
-                                name="total"
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                max="1000000"
-                                required
-                              />
-                            </label>
-                            <button disabled={busy}>Submit private bid</button>
-                          </form>
-                        )}
-                      {user?.role === "admin" && a.status === "open" && (
-                        <button
-                          disabled={busy || !closed}
-                          onClick={() =>
-                            act(
-                              () => api(`/auctions/${a.id}/award`, {}),
-                              "Lowest delivered bid awarded. The order is ready for the supplier.",
-                            )
-                          }
-                        >
-                          {closed
-                            ? "Award lowest bid"
-                            : "Waiting for bids to close"}
-                        </button>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-              {!data.auctions.length && (
+              {renderAuctionCards(shownAuctions)}
+              {!shownAuctions.length && (
                 <p className="empty">
-                  No auctions yet. The coordinator groups shop requests to open
-                  one.
+                  {user?.role === "supplier"
+                    ? activeTab === "My bids"
+                      ? "You have not submitted any bids yet."
+                      : "No open auction opportunities in your area yet."
+                    : "No auctions yet. The coordinator groups shop requests to open one."}
                 </p>
               )}
             </>
           )}
-          {tab === "Orders" && (
+          {activeTab === "Orders" && (
             <>
-              <h2>From collective order to your doorstep</h2>
-              <div className="cards">
-                {data.orders.map((o) => (
-                  <article key={o.id}>
-                    <div className="card-top">
-                      <span className="pill">{o.status}</span>
-                      <span>{o.area}</span>
-                    </div>
-                    <h2>{o.name}</h2>
-                    {o.total_cents !== undefined && (
-                      <p>
-                        Total delivered price{" "}
-                        <strong>{money(o.total_cents)}</strong>
-                      </p>
-                    )}
-                    {user?.role === "supplier" &&
-                      o.supplier_payout_cents !== undefined && (
-                        <p className="muted">
-                          Supplier payout after SupplyX fee: {" "}
-                          <strong>{money(o.supplier_payout_cents)}</strong>
-                        </p>
-                      )}
-                    {user?.role === "admin" &&
-                      o.supplier_fee_cents !== undefined && (
-                        <p className="muted">
-                          SupplyX supplier fee: {" "}
-                          <strong>{money(o.supplier_fee_cents)}</strong>
-                        </p>
-                      )}
-                    {o.allocations.map((x) => (
-                      <div className="allocation" key={x.request_id}>
-                        <strong>{x.shop_name}</strong>
-                        <p>
-                          {x.quantity} × {o.pack} · {money(x.charge_cents)}
-                        </p>
-                        {x.savings_cents !== undefined && (
-                          <small>Shop saving: {money(x.savings_cents)}</small>
-                        )}
-                        {x.received_at ? (
-                          <span className="pill">Received</span>
-                        ) : user?.role === "shop" &&
-                          ["dispatched", "accepted"].includes(o.status) ? (
-                          <button
-                            disabled={busy}
-                            onClick={() =>
-                              act(
-                                () =>
-                                  api(
-                                    `/allocations/${x.request_id}/receive`,
-                                    {},
-                                  ),
-                                "Receipt confirmed for your shop.",
-                              )
-                            }
-                          >
-                            Confirm receipt
-                          </button>
-                        ) : (
-                          <small>
-                            {o.status === "submitted"
-                              ? user?.role === "supplier"
-                                ? "You won this order. Prepare it for fulfilment."
-                                : "Order awarded. Supplier is preparing fulfilment."
-                              : o.status === "accepted"
-                                ? "Supplier accepted. Awaiting dispatch."
-                                : o.status === "dispatched"
-                                  ? "Awaiting shop receipt."
-                                  : o.status === "completed"
-                                    ? "Order completed."
-                                    : "Order in progress."}
-                          </small>
-                        )}
-                      </div>
-                    ))}
-                    {user?.role === "supplier" &&
-                      ["submitted", "accepted"].includes(o.status) && (
-                        <button
-                          disabled={busy}
-                          onClick={() =>
-                            act(
-                              () => api(`/orders/${o.id}/dispatch`, {}),
-                              "Dispatch recorded. Shops can confirm receipt.",
-                            )
-                          }
-                        >
-                          Mark dispatched
-                        </button>
-                      )}
-                  </article>
-                ))}
-              </div>
+              <h2>Orders</h2>
+              {renderOrders(data.orders)}
               {!data.orders.length && (
                 <p className="empty">
                   Awarded auctions will appear here as orders.
@@ -616,8 +826,9 @@ function App({ session, onSignOut }) {
             </>
           )}
           <div className="bottom-note">
-            LOCAL PROTOTYPE · Sample prices · No real payments · Area matching
-            uses an exact service-area name
+            {user?.role === "supplier"
+              ? "LOCAL PROTOTYPE · No real payments · Area matching uses exact names"
+              : "LOCAL PROTOTYPE · Sample prices · No real payments · Area matching uses an exact service-area name"}
           </div>
         </div>
       </main>
