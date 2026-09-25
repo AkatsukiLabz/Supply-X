@@ -3,6 +3,7 @@ import helmet from "helmet";
 import { z } from "zod";
 import { authentication } from "./auth.js";
 import { service } from "./service.js";
+import { buyingGroups } from "./groups.js";
 const uuid = z.string().uuid();
 export function createApp(db, config = {}) {
   const app = express(),
@@ -116,6 +117,9 @@ export function createApp(db, config = {}) {
   );
   app.post("/api/auctions/:id/award", async (req, res) =>
     res.json(await s.award(req.user, uuid.parse(req.params.id))),
+  );
+    app.get("/api/groups", async (req, res) =>
+    res.json(await buyingGroups(db, req.user)),
   );
   app.get("/api/orders", async (req, res) =>
     res.json(await s.orders(req.user)),

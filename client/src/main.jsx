@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import Login from "./Login.jsx";
 import Signup from "./Signup.jsx";
+import BuyingGroups from "./BuyingGroups.jsx";
 import { loadSession, clearSession, authHeaders, roleLabel } from "./auth.js";
 const money = (c) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(
@@ -28,10 +29,13 @@ const dateTimeNoSeconds = (value) =>
 const tabsForRole = (role) =>
   role === "supplier"
     ? ["Overview", "Available auctions", "My bids"]
-    : ["Overview", "Stock requests", "Auctions", "Orders"];
+        : role === "admin"
+      ? ["Overview", "Buying groups", "Stock requests", "Auctions", "Orders"]
+      : ["Overview", "Stock requests", "Auctions", "Orders"];
 
 const tabIcon = {
   Overview: "◫",
+  "Buying groups": "◎",
   "Stock requests": "▤",
   Auctions: "⇄",
   Orders: "▣",
@@ -85,6 +89,7 @@ function App({ session, onSignOut }) {
       requests: [],
       auctions: [],
       orders: [],
+      groups: [],
     }),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -119,17 +124,19 @@ function App({ session, onSignOut }) {
       const [auctions, orders] = await Promise.all(
         ["/auctions", "/orders"].map((p) => api(p)),
       );
-      return { products: [], requests: [], auctions, orders };
+      return { products: [], requests: [], auctions, orders, groups: [] };
     }
     const [products, requests, auctions, orders] = await Promise.all(
       ["/products", "/requests", "/auctions", "/orders"].map((p) => api(p)),
     );
-    return { products, requests, auctions, orders };
+      const groups =
+      user?.role === "admin" ? await api("/groups").catch(() => []) : [];
+    return { products, requests, auctions, orders, groups };
   }
   useEffect(() => {
     let active = true;
     setSelected([]);
-    setData({ products: [], requests: [], auctions: [], orders: [] });
+    setData({ products: [], requests: [], auctions: [], orders: [], groups: [] });
     setError("");
     if (userId) {
       setBusy(true);
@@ -438,7 +445,7 @@ function App({ session, onSignOut }) {
               )}
               {x.received_at ? (
                 <span className="pill">Received</span>
-              ) : user?.role === "shop" &&
+                ) : user?.role === "spaza_owner" &&
                 ["dispatched", "accepted"].includes(o.status) ? (
                 <button
                   disabled={busy}
@@ -652,11 +659,11 @@ function App({ session, onSignOut }) {
                       <button
                         onClick={() =>
                           setTab(
-                            user?.role === "shop" ? "Stock requests" : "Auctions",
+                            user?.role === "spaza_owner" ? "Stock requests" : "Auctions",
                           )
                         }
                       >
-                        {user?.role === "shop"
+                        {user?.role === "spaza_owner"
                           ? "Request stock"
                           : "Explore auctions"}{" "}
                         <span>↗</span>
@@ -728,13 +735,21 @@ function App({ session, onSignOut }) {
               )}
             </>
           )}
+                    {activeTab === "Buying groups" && user?.role === "admin" && (
+            <BuyingGroups
+              groups={data.groups}
+              money={money}
+              busy={busy}
+              onRefresh={() => act(async () => {}, "Buying groups updated.")}
+            />
+          )}
           {activeTab === "Stock requests" && (
             <>
               <div className="section-title">
                 <h2>Stock for your next chapter</h2>
                 <span>{data.products.length} products</span>
               </div>
-              {user?.role === "shop" && (
+                {user?.role === "spaza_owner" && (
                 <div className="products">
                   {data.products.map((p) => (
                     <article key={p.id}>
@@ -916,3 +931,5 @@ function App({ session, onSignOut }) {
   );
 }
 createRoot(document.getElementById("root")).render(<Root />);
+
+//last so far. 
