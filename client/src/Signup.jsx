@@ -9,7 +9,7 @@ import {
 import "./login.css";
 
 const EMPTY = {
-  role: "shop",
+  role: "spaza_owner",
   businessName: "",
   contactName: "",
   email: "",
@@ -58,7 +58,7 @@ export default function Signup({ onShowLogin }) {
     }
   }
 
-  const isShop = form.role === "shop";
+  const isShop = form.role === "spaza_owner";
   const field = (name) => (errors[name] ? "invalid" : "");
   const hint = (name) =>
     errors[name] && <span className="field-error">{errors[name]}</span>;

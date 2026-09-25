@@ -1,12 +1,12 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const signupRole = (role) => {
-  if (role === "shop" || role === "supplier") return role;
+  if (role === "spaza_owner" || role === "supplier") return role;
   return null;
 };
 
-const dbRole = (role) => (role === "shop" ? "spaza_owner" : role);
-const appRole = (role) => (role === "spaza_owner" ? "shop" : role);
+const dbRole = (role) => role;
+const appRole = (role) => role;
 
 const signupProfile = (payload) => {
   const meta = payload.user_metadata || {};
@@ -46,7 +46,7 @@ const createPublicProfile = async (db, profile) =>
         role = EXCLUDED.role`,
       [profile.id, profile.contactName, profile.phone || null, dbRole(profile.role)],
     );
-    if (profile.role === "shop") {
+    if (profile.role === "spaza_owner") {
       await tx.query(
         `INSERT INTO public.spaza_shops(owner_id, shop_name, location)
          VALUES($1, $2, $3)

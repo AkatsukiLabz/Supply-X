@@ -8,7 +8,9 @@
 // No backend changes are needed.
 
 export const ROLES = [
-  { value: "shop", label: "Shop", hint: "Request stock with nearby shops" },
+  { value: "spaza_owner",
+    label: "Shop Owner",
+    hint: "Request stock with nearby shops" },
   { value: "supplier", label: "Supplier", hint: "Bid on combined orders" },
   { value: "admin", label: "Admin", hint: "Coordinate requests and auctions" },
 ];
@@ -22,13 +24,13 @@ export const DEMO_ACCOUNTS = [
   {
     email: "mosh@supplyx.demo",
     name: "Mosh’s Mini Market",
-    role: "shop",
+    role: "spaza_owner",
     id: "10000000-0000-4000-8000-000000000001",
   },
   {
     email: "corner@supplyx.demo",
     name: "Corner Basket",
-    role: "shop",
+    role: "spaza_owner",
     id: "10000000-0000-4000-8000-000000000002",
   },
   {
@@ -136,7 +138,7 @@ async function fetchProfile(headers) {
 
 // ---------- sign in ----------
 
-export async function signIn({ email, password, role, mode }) {
+export async function signIn({ email, password, mode }) {
   email = email.trim().toLowerCase();
   if (!email || !password) throw Error("Enter your email and password.");
 
@@ -178,13 +180,6 @@ export async function signIn({ email, password, role, mode }) {
       user,
     };
   }
-
-  if (session.user.role !== role)
-    throw Error(
-      `This is a ${roleLabel(session.user.role)} account. Choose "${roleLabel(
-        session.user.role,
-      )}" above and sign in again.`,
-    );
 
   return session;
 }

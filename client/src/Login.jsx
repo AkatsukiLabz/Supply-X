@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  ROLES,
   DEMO_ACCOUNTS,
   DEMO_PASSWORD,
   getMode,
@@ -13,7 +12,6 @@ import "./login.css";
 
 export default function Login({ onSignIn, onShowSignup }) {
   const [mode, setMode] = useState("");
-  const [role, setRole] = useState("shop");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -34,7 +32,7 @@ export default function Login({ onSignIn, onShowSignup }) {
     setError("");
     setNotice("");
     try {
-      const session = await signIn({ email, password, role, mode });
+      const session = await signIn({ email, password, mode });
       saveSession(session, remember);
       onSignIn(session);
     } catch (err) {
@@ -55,14 +53,12 @@ export default function Login({ onSignIn, onShowSignup }) {
   }
 
   function fillDemo(account) {
-    setRole(account.role);
     setEmail(account.email);
     setPassword(DEMO_PASSWORD);
     setError("");
     setNotice("");
   }
 
-  const current = ROLES.find((r) => r.value === role);
 
   return (
     <div className="login">
@@ -101,30 +97,7 @@ export default function Login({ onSignIn, onShowSignup }) {
         <form className="login-card" onSubmit={handleSubmit} noValidate>
           <div className="eyebrow">WELCOME BACK</div>
           <h1>Sign in to SupplyX</h1>
-          <p className="login-sub">Choose your account type to continue.</p>
-
-          <div
-            className="role-picker"
-            role="radiogroup"
-            aria-label="Account type"
-          >
-            {ROLES.map((r) => (
-              <button
-                type="button"
-                key={r.value}
-                role="radio"
-                aria-checked={role === r.value}
-                className={role === r.value ? "selected" : ""}
-                onClick={() => {
-                  setRole(r.value);
-                  setError("");
-                }}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <p className="role-hint">{current.hint}</p>
+          <p className="login-sub">Enter sign in details to continue.</p>
 
           <label>
             Email address
@@ -186,7 +159,7 @@ export default function Login({ onSignIn, onShowSignup }) {
           )}
 
           <button className="login-submit" disabled={busy || !mode}>
-            {busy ? "Signing in…" : `Sign in as ${current.label}`}
+          {busy ? "Signing in…" : "Sign in"}
           </button>
 
         <p className="login-help">

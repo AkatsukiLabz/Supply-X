@@ -77,7 +77,7 @@ export function service(db, clock = () => new Date()) {
     },
 
     async createRequest(u, { productId, quantity }) {
-      requireRole(u, "shop");
+      requireRole(u, "spaza_owner");
       return db.transaction(async (tx) => {
         const product = await one(
           tx,
@@ -461,7 +461,7 @@ export function service(db, clock = () => new Date()) {
     },
 
     async receive(u, requestId) {
-      requireRole(u, "shop");
+      requireRole(u, "spaza_owner");
       return db.transaction(async (tx) => {
         const allocation = await one(
           tx,
