@@ -3,7 +3,10 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import Login from "./Login.jsx";
 import Signup from "./Signup.jsx";
+import Shops from "./Shops.jsx";
+import Wallet from "./Wallet.jsx";
 import { loadSession, clearSession, authHeaders, roleLabel } from "./auth.js";
+
 const money = (c) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(
     c / 100,
@@ -25,10 +28,15 @@ const dateTimeNoSeconds = (value) =>
     hour12: false,
   }).format(new Date(value));
 
+// Shop owners are stored as "spaza_owner" in auth.js
+const isShop = (role) => role === "spaza_owner";
+
 const tabsForRole = (role) =>
   role === "supplier"
     ? ["Overview", "Available auctions", "My bids"]
-    : ["Overview", "Stock requests", "Auctions", "Orders"];
+    : isShop(role)
+      ? ["Overview", "Shops", "Wallet", "Stock requests", "Auctions", "Orders"]
+      : ["Overview", "Stock requests", "Auctions", "Orders"];
 
 const tabIcon = {
   Overview: "◫",
@@ -37,6 +45,8 @@ const tabIcon = {
   Orders: "▣",
   "Available auctions": "⇄",
   "My bids": "◧",
+  Shops: "▦",
+  Wallet: "◨",
 };
 
 const pageCopy = (role, tab) => {
@@ -49,6 +59,12 @@ const pageCopy = (role, tab) => {
           : "My bids";
     return { eyebrow: "SUPPLIER PORTAL", title };
   }
+
+  if (tab === "Shops")
+    return { eyebrow: "RIGHT SPEC. RIGHT PLACE.", title: "Shops" };
+  if (tab === "Wallet")
+    return { eyebrow: "PREPAID BALANCE", title: "Wallet" };
+
   return {
     eyebrow: "INDEPENDENT SHOPS. SHARED OPPORTUNITY.",
     title: tab === "Overview" ? "Let’s grow together." : tab,
@@ -61,6 +77,7 @@ const auctionState = (auction) =>
     : Date.now() >= new Date(auction.closes_at).getTime()
       ? "closed"
       : auction.status;
+
 function Root() {
   const [session, setSession] = useState(() => loadSession());
   const [page, setPage] = useState("login");
@@ -76,6 +93,7 @@ function Root() {
     );
   return <App session={session} onSignOut={signOut} />;
 }
+
 function App({ session, onSignOut }) {
   const user = session.user,
     userId = user.id,
@@ -93,13 +111,13 @@ function App({ session, onSignOut }) {
     [selected, setSelected] = useState([]),
     [selectedAuctionId, setSelectedAuctionId] = useState(null),
     [, setClockTick] = useState(() => Date.now());
+
   const api = async (path, body) => {
     const r = await fetch("/api" + path, {
       method: body === undefined ? "GET" : "POST",
       headers: { "Content-Type": "application/json", ...authHeaders(session) },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    // Session expired or account removed: go back to the login screen.
     if (r.status === 401) {
       onSignOut();
       throw Error("Your session has ended. Please sign in again.");
@@ -114,6 +132,7 @@ function App({ session, onSignOut }) {
       );
     return result;
   };
+
   async function load() {
     if (user?.role === "supplier") {
       const [auctions, orders] = await Promise.all(
@@ -126,6 +145,7 @@ function App({ session, onSignOut }) {
     );
     return { products, requests, auctions, orders };
   }
+
   useEffect(() => {
     let active = true;
     setSelected([]);
@@ -148,6 +168,7 @@ function App({ session, onSignOut }) {
       active = false;
     };
   }, [userId]);
+
   useEffect(() => {
     if (user?.role !== "supplier") return undefined;
     const id = window.setInterval(() => setClockTick(Date.now()), 10000);
@@ -191,12 +212,11 @@ function App({ session, onSignOut }) {
       setBusy(false);
     }
   }
+
   const tabs = tabsForRole(user?.role);
   const activeTab = tabs.includes(tab) ? tab : tabs[0];
   const copy = pageCopy(user?.role, activeTab);
   const open = data.auctions.filter((a) => auctionState(a) === "open").length;
-  const supplierBids = data.auctions.filter((a) => a.bids.length > 0);
-  const supplierWonOrders = data.orders;
   const wonAuctionIds = new Set(data.orders.map((order) => order.auction_id));
   const pendingSupplierOrders = data.orders.filter(
     (order) => order.status === "submitted",
@@ -213,12 +233,14 @@ function App({ session, onSignOut }) {
       return availableSupplierAuctions.some((auction) => auction.id === a.id);
     return true;
   });
+
   const bidResult = (auction) => {
     if (!auction.bids.length) return null;
     if (wonAuctionIds.has(auction.id)) return "won";
     if (auctionState(auction) === "awarded") return "lost";
     return null;
   };
+
   const bidTrackerSteps = (auction) => {
     const order = data.orders.find((o) => o.auction_id === auction.id);
     const result = bidResult(auction);
@@ -244,6 +266,7 @@ function App({ session, onSignOut }) {
     if (result === "lost") return [{ label: "Lost", done: true, tone: "lost" }];
     return [{ label: "Result pending", done: false }];
   };
+
   const renderAuctionCards = (auctions) => (
     <div className="cards">
       {auctions.map((a) => {
@@ -285,19 +308,21 @@ function App({ session, onSignOut }) {
                   {a.quantity} × {a.pack}
                 </p>
                 <p className="muted auction-time">
-                  {state === "open" ? "Closes" : "Closed"} {dateTimeNoSeconds(a.closes_at)}
+                  {state === "open" ? "Closes" : "Closed"}{" "}
+                  {dateTimeNoSeconds(a.closes_at)}
                 </p>
               </>
             )}
             {user?.role === "supplier" && state === "open" && (
               <p className="opportunity-fit">
-                Matches your service area. Submit a delivered total below the retail benchmark to stay competitive.
+                Matches your service area. Submit a delivered total below the
+                retail benchmark to stay competitive.
               </p>
             )}
             {a.bids.length > 0 && (
               <>
                 <p>
-                  {user?.role === "supplier" ? "Your bid" : "Bids after close"}: {" "}
+                  {user?.role === "supplier" ? "Your bid" : "Bids after close"}:{" "}
                   {a.bids.map((b) => money(b.total_cents)).join(" · ")}
                 </p>
                 {activeTab === "My bids" && (
@@ -338,11 +363,19 @@ function App({ session, onSignOut }) {
                   <div className="bid-guidance">
                     <strong>Before you bid</strong>
                     <ul>
-                      <li>Your price must include delivery and all supplier charges.</li>
+                      <li>
+                        Your price must include delivery and all supplier
+                        charges.
+                      </li>
                       {a.retail_benchmark_cents > 0 && (
-                        <li>Keep your delivered total below {money(a.retail_benchmark_cents)} to qualify.</li>
+                        <li>
+                          Keep your delivered total below{" "}
+                          {money(a.retail_benchmark_cents)} to qualify.
+                        </li>
                       )}
-                      <li>Competitors cannot see your bid while bidding is open.</li>
+                      <li>
+                        Competitors cannot see your bid while bidding is open.
+                      </li>
                     </ul>
                   </div>
                   <label>
@@ -413,16 +446,16 @@ function App({ session, onSignOut }) {
               Total delivered price <strong>{money(o.total_cents)}</strong>
             </p>
           )}
-          {user?.role === "supplier" &&
-            o.supplier_payout_cents !== undefined && (
-              <p className="muted">
-                Supplier payout after SupplyX fee: {" "}
-                <strong>{money(o.supplier_payout_cents)}</strong>
-              </p>
-            )}
+          {user?.role === "supplier" && o.supplier_payout_cents !== undefined && (
+            <p className="muted">
+              Supplier payout after SupplyX fee:{" "}
+              <strong>{money(o.supplier_payout_cents)}</strong>
+            </p>
+          )}
           {user?.role === "admin" && o.supplier_fee_cents !== undefined && (
             <p className="muted">
-              SupplyX supplier fee: <strong>{money(o.supplier_fee_cents)}</strong>
+              SupplyX supplier fee:{" "}
+              <strong>{money(o.supplier_fee_cents)}</strong>
             </p>
           )}
           {o.allocations.map((x) => (
@@ -438,7 +471,7 @@ function App({ session, onSignOut }) {
               )}
               {x.received_at ? (
                 <span className="pill">Received</span>
-              ) : user?.role === "shop" &&
+              ) : isShop(user?.role) &&
                 ["dispatched", "accepted"].includes(o.status) ? (
                 <button
                   disabled={busy}
@@ -487,28 +520,7 @@ function App({ session, onSignOut }) {
       ))}
     </div>
   );
-  const renderSupplierOrderSections = () => (
-    <>
-      <div className="section-title split-heading">
-        <h2>Needs dispatch</h2>
-        <span>{pendingSupplierOrders.length} orders</span>
-      </div>
-      {pendingSupplierOrders.length ? (
-        renderOrders(pendingSupplierOrders)
-      ) : (
-        <p className="empty">No won orders waiting for dispatch.</p>
-      )}
-      <div className="section-title split-heading">
-        <h2>Dispatched / waiting for receipt</h2>
-        <span>{dispatchedSupplierOrders.length} orders</span>
-      </div>
-      {dispatchedSupplierOrders.length ? (
-        renderOrders(dispatchedSupplierOrders)
-      ) : (
-        <p className="empty">No dispatched orders yet.</p>
-      )}
-    </>
-  );
+
   return (
     <div className="layout">
       <aside>
@@ -576,6 +588,7 @@ function App({ session, onSignOut }) {
               </button>
             </div>
           </div>
+
           {error && (
             <div role="alert" className="message error">
               {error}
@@ -586,6 +599,7 @@ function App({ session, onSignOut }) {
               {notice}
             </div>
           )}
+
           {activeTab === "Overview" && (
             <>
               {user?.role === "supplier" ? (
@@ -608,7 +622,8 @@ function App({ session, onSignOut }) {
                           renderAuctionCards(availableSupplierAuctions)
                         ) : (
                           <p className="empty dashboard-empty">
-                            There are no open auctions right now. Open auctions will show here, check back in a few.
+                            There are no open auctions right now. Open auctions
+                            will show here, check back in a few.
                           </p>
                         )}
                       </aside>
@@ -628,8 +643,9 @@ function App({ session, onSignOut }) {
                         <p className="empty-kicker">No live opportunities</p>
                         <h2>No open auctions right now.</h2>
                         <p>
-                          New supplier opportunities will appear here once nearby
-                          shop demand is ready for bidding. Check back shortly.
+                          New supplier opportunities will appear here once
+                          nearby shop demand is ready for bidding. Check back
+                          shortly.
                         </p>
                       </div>
                     </section>
@@ -652,11 +668,13 @@ function App({ session, onSignOut }) {
                       <button
                         onClick={() =>
                           setTab(
-                            user?.role === "shop" ? "Stock requests" : "Auctions",
+                            isShop(user?.role)
+                              ? "Stock requests"
+                              : "Auctions",
                           )
                         }
                       >
-                        {user?.role === "shop"
+                        {isShop(user?.role)
                           ? "Request stock"
                           : "Explore auctions"}{" "}
                         <span>↗</span>
@@ -728,13 +746,18 @@ function App({ session, onSignOut }) {
               )}
             </>
           )}
+
+          {activeTab === "Shops" && <Shops user={user} />}
+
+          {activeTab === "Wallet" && <Wallet user={user} />}
+
           {activeTab === "Stock requests" && (
             <>
               <div className="section-title">
                 <h2>Stock for your next chapter</h2>
                 <span>{data.products.length} products</span>
               </div>
-              {user?.role === "shop" && (
+              {isShop(user?.role) && (
                 <div className="products">
                   {data.products.map((p) => (
                     <article key={p.id}>
@@ -865,10 +888,15 @@ function App({ session, onSignOut }) {
               )}
             </>
           )}
-          {(activeTab === "Auctions" || activeTab === "Available auctions" || activeTab === "My bids") && (
+
+          {(activeTab === "Auctions" ||
+            activeTab === "Available auctions" ||
+            activeTab === "My bids") && (
             <>
               <div className="section-title">
-                <h2>{user?.role === "supplier" ? activeTab : "Shared demand"}</h2>
+                <h2>
+                  {user?.role === "supplier" ? activeTab : "Shared demand"}
+                </h2>
                 <button
                   className="secondary"
                   disabled={busy}
@@ -894,6 +922,7 @@ function App({ session, onSignOut }) {
               )}
             </>
           )}
+
           {activeTab === "Orders" && (
             <>
               <h2>Orders</h2>
@@ -905,14 +934,16 @@ function App({ session, onSignOut }) {
               )}
             </>
           )}
+
           <div className="bottom-note">
             {user?.role === "supplier"
               ? "LOCAL PROTOTYPE · No real payments · Area matching uses exact names"
-              : "LOCAL PROTOTYPE · Sample prices · No real payments · Area matching uses an exact service-area name"}
+              : "LOCAL PROTOTYPE · Demo wallet · No real money movement · Area matching uses an exact service-area name"}
           </div>
         </div>
       </main>
     </div>
   );
 }
+
 createRoot(document.getElementById("root")).render(<Root />);
