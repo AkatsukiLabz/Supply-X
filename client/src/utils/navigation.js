@@ -4,7 +4,7 @@ export const tabsForRole = (role) =>
   role === "supplier"
     ? ["Overview", "Available auctions", "My bids"]
     : isShop(role)
-      ? ["Overview", "Shops", "Wallet", "Stock requests", "Auctions", "Orders"]
+      ? ["Overview", "Stock requests", "Orders"]
       : role === "admin"
         ? ["Overview", "Buying groups", "Stock requests", "Auctions", "Orders"]
         : ["Overview", "Stock requests", "Auctions", "Orders"];
@@ -17,8 +17,6 @@ export const tabIcon = {
   Orders: "▣",
   "Available auctions": "⇄",
   "My bids": "◧",
-  Shops: "▦",
-  Wallet: "◨",
 };
 
 export const pageCopy = (role, tab) => {
@@ -37,11 +35,6 @@ export const pageCopy = (role, tab) => {
       eyebrow: "SUPPLYX COORDINATION",
       title: tab === "Overview" ? "Coordinator workspace" : tab,
     };
-
-  if (tab === "Shops")
-    return { eyebrow: "RIGHT SPEC. RIGHT PLACE.", title: "Shops" };
-  if (tab === "Wallet")
-    return { eyebrow: "PREPAID BALANCE", title: "Wallet" };
 
   return {
     eyebrow: "INDEPENDENT SHOPS. SHARED OPPORTUNITY.",

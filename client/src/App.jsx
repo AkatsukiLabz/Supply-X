@@ -6,11 +6,9 @@ import AdminOverview from "./pages/AdminOverview.jsx";
 import AuctionsPage from "./pages/AuctionsPage.jsx";
 import BuyingGroupsPage from "./pages/BuyingGroupsPage.jsx";
 import OrdersPage from "./pages/OrdersPage.jsx";
-import ShopsPage from "./pages/ShopsPage.jsx";
 import ShopOverview from "./pages/ShopOverview.jsx";
 import StockRequestsPage from "./pages/StockRequestsPage.jsx";
 import SupplierOverview from "./pages/SupplierOverview.jsx";
-import WalletPage from "./pages/WalletPage.jsx";
 
 const emptyData = {
   products: [],
@@ -169,11 +167,7 @@ export default function App({ session, onSignOut }) {
   } else if (activeTab === "Overview" && user?.role === "admin") {
     page = <AdminOverview data={data} setTab={setTab} />;
   } else if (activeTab === "Overview" && isShop(user?.role)) {
-    page = <ShopOverview data={data} setTab={setTab} />;
-  } else if (activeTab === "Shops") {
-    page = <ShopsPage user={user} products={data.products} />;
-  } else if (activeTab === "Wallet") {
-    page = <WalletPage user={user} />;
+    page = <ShopOverview user={user} onGoTo={setTab} />;
   } else if (activeTab === "Buying groups" && user?.role === "admin") {
     page = <BuyingGroupsPage groups={data.groups} busy={busy} act={act} />;
   } else if (activeTab === "Stock requests") {
