@@ -5,6 +5,8 @@ import Login from "./Login.jsx";
 import Signup from "./Signup.jsx";
 import Shops from "./Shops.jsx";
 import Wallet from "./Wallet.jsx";
+import BuyingGroups from "./BuyingGroups.jsx";
+import StockRequestGroups from "./StockRequestGroups.jsx";
 import { loadSession, clearSession, authHeaders, roleLabel } from "./auth.js";
 
 const money = (c) =>
@@ -36,10 +38,13 @@ const tabsForRole = (role) =>
     ? ["Overview", "Available auctions", "My bids"]
     : isShop(role)
       ? ["Overview", "Shops", "Wallet", "Stock requests", "Auctions", "Orders"]
-      : ["Overview", "Stock requests", "Auctions", "Orders"];
+      : role === "admin"
+        ? ["Overview", "Buying groups", "Stock requests", "Auctions", "Orders"]
+        : ["Overview", "Stock requests", "Auctions", "Orders"];
 
 const tabIcon = {
   Overview: "◫",
+  "Buying groups": "◎",
   "Stock requests": "▤",
   Auctions: "⇄",
   Orders: "▣",
@@ -103,6 +108,7 @@ function App({ session, onSignOut }) {
       requests: [],
       auctions: [],
       orders: [],
+      groups: [],
     }),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -138,18 +144,29 @@ function App({ session, onSignOut }) {
       const [auctions, orders] = await Promise.all(
         ["/auctions", "/orders"].map((p) => api(p)),
       );
-      return { products: [], requests: [], auctions, orders };
+      return { products: [], requests: [], auctions, orders, groups: [] };
     }
+    // Load each section on its own, so one failing section does not
+    // empty every other section. Any failure is named in the error message.
+    const failed = [];
+    const safe = (path) =>
+      api(path).catch((e) => {
+        failed.push(`${path.slice(1)}: ${e.message}`);
+        return [];
+      });
     const [products, requests, auctions, orders] = await Promise.all(
-      ["/products", "/requests", "/auctions", "/orders"].map((p) => api(p)),
+      ["/products", "/requests", "/auctions", "/orders"].map(safe),
     );
-    return { products, requests, auctions, orders };
+    const groups = user?.role === "admin" ? await safe("/groups") : [];
+    if (failed.length)
+      setTimeout(() => setError("Some data could not load. " + failed.join(" | ")), 0);
+    return { products, requests, auctions, orders, groups };
   }
 
   useEffect(() => {
     let active = true;
     setSelected([]);
-    setData({ products: [], requests: [], auctions: [], orders: [] });
+    setData({ products: [], requests: [], auctions: [], orders: [], groups: [] });
     setError("");
     if (userId) {
       setBusy(true);
@@ -751,6 +768,15 @@ function App({ session, onSignOut }) {
 
           {activeTab === "Wallet" && <Wallet user={user} />}
 
+          {activeTab === "Buying groups" && user?.role === "admin" && (
+            <BuyingGroups
+              groups={data.groups}
+              money={money}
+              busy={busy}
+              onRefresh={() => act(async () => {}, "Buying groups updated.")}
+            />
+          )}
+
           {activeTab === "Stock requests" && (
             <>
               <div className="section-title">
@@ -798,57 +824,68 @@ function App({ session, onSignOut }) {
                   ))}
                 </div>
               )}
-              <h2>Submitted requests</h2>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      {user?.role === "admin" && <th>Select</th>}
-                      <th>Product</th>
-                      <th>Packs</th>
-                      <th>Area</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.requests.map((r) => (
-                      <tr key={r.id}>
-                        {user?.role === "admin" && (
-                          <td>
-                            <input
-                              type="checkbox"
-                              aria-label={`Select request ${r.id}`}
-                              disabled={r.status !== "submitted" || busy}
-                              checked={selected.includes(r.id)}
-                              onChange={(e) =>
-                                setSelected(
-                                  e.target.checked
-                                    ? [...selected, r.id]
-                                    : selected.filter((id) => id !== r.id),
-                                )
-                              }
-                            />
-                          </td>
-                        )}
-                        <td>
-                          {r.name}
-                          <small>{r.pack}</small>
-                        </td>
-                        <td>{r.quantity}</td>
-                        <td>{r.area}</td>
-                        <td>
-                          <span className="pill">{r.status}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!data.requests.length && (
-                  <p className="empty">
-                    No requests yet. Shop accounts can submit stock above.
-                  </p>
-                )}
-              </div>
+              {user?.role === "admin" ? (
+                <StockRequestGroups
+                  requests={data.requests}
+                  selected={selected}
+                  setSelected={setSelected}
+                  busy={busy}
+                />
+              ) : (
+                <>
+                  <h2>Submitted requests</h2>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          {user?.role === "admin" && <th>Select</th>}
+                          <th>Product</th>
+                          <th>Packs</th>
+                          <th>Area</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.requests.map((r) => (
+                          <tr key={r.id}>
+                            {user?.role === "admin" && (
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select request ${r.id}`}
+                                  disabled={r.status !== "submitted" || busy}
+                                  checked={selected.includes(r.id)}
+                                  onChange={(e) =>
+                                    setSelected(
+                                      e.target.checked
+                                        ? [...selected, r.id]
+                                        : selected.filter((id) => id !== r.id),
+                                    )
+                                  }
+                                />
+                              </td>
+                            )}
+                            <td>
+                              {r.name}
+                              <small>{r.pack}</small>
+                            </td>
+                            <td>{r.quantity}</td>
+                            <td>{r.area}</td>
+                            <td>
+                              <span className="pill">{r.status}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!data.requests.length && (
+                      <p className="empty">
+                        No requests yet. Shop accounts can submit stock above.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
               {user?.role === "admin" && (
                 <form
                   className="auction-form"

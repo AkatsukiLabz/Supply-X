@@ -4,27 +4,27 @@ export class Fault extends Error {
     this.status = status;
   }
 }
-
+ 
 export function requireRole(user, role) {
   if (user.role !== role) throw new Fault(403, `${role} access required`);
 }
-
+ 
 const one = async (db, sql, p = []) => {
   const r = (await db.query(sql, p)).rows[0];
   if (!r) throw new Fault(404, "Record not found");
   return r;
 };
-
+ 
 const currentShop = (db, userId) =>
   one(db, "SELECT * FROM public.spaza_shops WHERE owner_id=$1 LIMIT 1", [
     userId,
   ]);
-
+ 
 const currentSupplier = (db, userId) =>
   one(db, "SELECT * FROM public.suppliers WHERE owner_id=$1 LIMIT 1", [
     userId,
   ]);
-
+ 
 async function ensureGroupMember(tx, u) {
   const shop = await currentShop(tx, u.id);
   const group = (
@@ -44,14 +44,14 @@ async function ensureGroupMember(tx, u) {
     )
   ).rows[0];
 }
-
+ 
 const statusForApp = (status) =>
   status === "funded"
     ? "submitted"
     : status === "fulfilled"
       ? "received"
       : status;
-
+ 
 export function service(db, clock = () => new Date()) {
   return {
     async requests(u) {
@@ -64,7 +64,9 @@ export function service(db, clock = () => new Date()) {
           r.status,
           r.created_at,
           p.product_name AS name,
-          p.unit AS pack
+          p.unit AS pack,
+          s.id AS shop_id,
+          s.shop_name
          FROM public.requests r
          JOIN public.products p ON p.id = r.product_id
          JOIN public.group_members gm ON gm.id = r.group_member_id
@@ -75,7 +77,7 @@ export function service(db, clock = () => new Date()) {
       );
       return rows.rows.map((r) => ({ ...r, status: statusForApp(r.status) }));
     },
-
+ 
     async createRequest(u, { productId, quantity }) {
       requireRole(u, "spaza_owner");
       return db.transaction(async (tx) => {
@@ -116,7 +118,7 @@ export function service(db, clock = () => new Date()) {
         };
       });
     },
-
+ 
     async auctions(u) {
       const result = await db.query(
         `SELECT
@@ -169,7 +171,7 @@ export function service(db, clock = () => new Date()) {
       }
       return rows;
     },
-
+ 
     async createAuction(u, { requestIds, closesAt }) {
       requireRole(u, "admin");
       if (new Date(closesAt) <= clock())
@@ -214,7 +216,7 @@ export function service(db, clock = () => new Date()) {
         return auction;
       });
     },
-
+ 
     async bid(u, id, { totalCents }) {
       requireRole(u, "supplier");
       return db.transaction(async (tx) => {
@@ -252,7 +254,7 @@ export function service(db, clock = () => new Date()) {
         ).rows[0];
       });
     },
-
+ 
     async award(u, id) {
       requireRole(u, "admin");
       return db.transaction(async (tx) => {
@@ -265,7 +267,7 @@ export function service(db, clock = () => new Date()) {
           throw new Fault(409, "This auction has already been awarded");
         if (clock() < new Date(auction.closes_at))
           throw new Fault(409, "Wait for bidding to close before awarding");
-
+ 
         const winningBid = (
           await tx.query(
             `SELECT *
@@ -278,12 +280,12 @@ export function service(db, clock = () => new Date()) {
           )
         ).rows[0];
         if (!winningBid) throw new Fault(409, "No supplier bids to award");
-
+ 
         const subtotal = Number(winningBid.unit_price) * Number(auction.quantity);
         const supplierFeeRate = 10;
         const supplierFeeAmount = subtotal * (supplierFeeRate / 100);
         const supplierPayout = subtotal - supplierFeeAmount;
-
+ 
         const order = (
           await tx.query(
             `INSERT INTO public.bulk_orders(
@@ -311,7 +313,7 @@ export function service(db, clock = () => new Date()) {
             ],
           )
         ).rows[0];
-
+ 
         await tx.query(
           `INSERT INTO public.bulk_order_items(
             bulk_order_id, product_id, quantity, unit_price, line_total
@@ -325,7 +327,7 @@ export function service(db, clock = () => new Date()) {
             subtotal,
           ],
         );
-
+ 
         const requests = (
           await tx.query(
             `SELECT r.*
@@ -336,7 +338,7 @@ export function service(db, clock = () => new Date()) {
             [id],
           )
         ).rows;
-
+ 
         for (const request of requests) {
           const actualCost = Number(winningBid.unit_price) * Number(request.quantity);
           const savingsAmount = Math.max(
@@ -361,7 +363,7 @@ export function service(db, clock = () => new Date()) {
             [request.id],
           );
         }
-
+ 
         await tx.query(
           `UPDATE public.auctions SET status='awarded' WHERE id=$1`,
           [id],
@@ -370,7 +372,7 @@ export function service(db, clock = () => new Date()) {
           `UPDATE public.purchasing_groups SET status='ordered' WHERE id=$1`,
           [auction.group_id],
         );
-
+ 
         return {
           ...order,
           total_cents: Math.round(subtotal * 100),
@@ -379,7 +381,7 @@ export function service(db, clock = () => new Date()) {
         };
       });
     },
-
+ 
     async orders(u) {
       const result = await db.query(
         `SELECT
@@ -434,7 +436,7 @@ export function service(db, clock = () => new Date()) {
       }
       return orders;
     },
-
+ 
     async dispatch(u, id) {
       requireRole(u, "supplier");
       return db.transaction(async (tx) => {
@@ -459,7 +461,7 @@ export function service(db, clock = () => new Date()) {
         ).rows[0];
       });
     },
-
+ 
     async receive(u, requestId) {
       requireRole(u, "spaza_owner");
       return db.transaction(async (tx) => {
@@ -477,12 +479,12 @@ export function service(db, clock = () => new Date()) {
         );
         if (!['accepted', 'completed'].includes(allocation.order_status))
           throw new Fault(409, "This order has not been dispatched yet");
-
+ 
         await tx.query(
           `UPDATE public.requests SET status='fulfilled' WHERE id=$1`,
           [requestId],
         );
-
+ 
         const remaining = (
           await tx.query(
             `SELECT COUNT(*)::integer AS count
@@ -492,7 +494,7 @@ export function service(db, clock = () => new Date()) {
             [allocation.order_id],
           )
         ).rows[0].count;
-
+ 
         if (remaining === 0) {
           await tx.query(
             `UPDATE public.bulk_orders SET status='completed' WHERE id=$1`,
@@ -506,9 +508,12 @@ export function service(db, clock = () => new Date()) {
             [allocation.order_id],
           );
         }
-
+ 
         return { request_id: requestId, received_at: clock().toISOString() };
       });
     },
   };
 }
+ 
+
+
