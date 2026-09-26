@@ -7,6 +7,7 @@ import React, { useState } from "react";
 const statusClass = {
   "Awaiting Contributions": "group-status awaiting",
   "Ready for Bidding": "group-status ready",
+  "On Auction": "group-status auction",
   "Bid Selected": "group-status selected",
   Completed: "group-status completed",
 };
@@ -49,6 +50,33 @@ export default function BuyingGroups({ groups, money, busy, onRefresh }) {
             <strong>{money(group.contributionCents)}</strong>
           </div>
         </div>
+        {group.savings && (
+          <>
+            <h3>Savings</h3>
+            <div className="group-summary">
+              <div>
+                <span>Total shop contributions</span>
+                <strong>{money(group.savings.contributionCents)}</strong>
+              </div>
+              <div>
+                <span>Winning bid</span>
+                <strong>{money(group.savings.winningBidCents)}</strong>
+              </div>
+              <div>
+                <span>Savings</span>
+                <strong>{money(group.savings.savingsCents)}</strong>
+              </div>
+              <div>
+                <span>Platform fee (10% of winning bid)</span>
+                <strong>{money(group.savings.platformFeeCents)}</strong>
+              </div>
+              <div>
+                <span>Supplier receives</span>
+                <strong>{money(group.savings.supplierPayoutCents)}</strong>
+              </div>
+            </div>
+          </>
+        )}
         <div className="table-wrap">
           <table>
             <thead>
@@ -107,6 +135,7 @@ export default function BuyingGroups({ groups, money, busy, onRefresh }) {
               <th>Product</th>
               <th>Total quantity</th>
               <th>Contributions</th>
+              <th>Savings</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -137,6 +166,16 @@ export default function BuyingGroups({ groups, money, busy, onRefresh }) {
                 </td>
                 <td>{g.totalQuantity}</td>
                 <td>{money(g.contributionCents)}</td>
+                <td>
+                  {g.savings ? (
+                    <>
+                      {money(g.savings.savingsCents)}
+                      <small>
+                        Fee {money(g.savings.platformFeeCents)}
+                      </small>
+                    </>
+                  ) : null}
+                </td>
                 <td>
                   <StatusPill status={g.status} />
                 </td>

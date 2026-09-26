@@ -4,6 +4,7 @@ import "./style.css";
 import Login from "./Login.jsx";
 import Signup from "./Signup.jsx";
 import BuyingGroups from "./BuyingGroups.jsx";
+import StockRequestGroups from "./StockRequestGroups.jsx";
 import { loadSession, clearSession, authHeaders, roleLabel } from "./auth.js";
 const money = (c) =>
   new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(
@@ -126,11 +127,20 @@ function App({ session, onSignOut }) {
       );
       return { products: [], requests: [], auctions, orders, groups: [] };
     }
+    // Load each section on its own, so one failing section does not
+    // empty every other section. Any failure is named in the error message.
+    const failed = [];
+    const safe = (path) =>
+      api(path).catch((e) => {
+        failed.push(`${path.slice(1)}: ${e.message}`);
+        return [];
+      });
     const [products, requests, auctions, orders] = await Promise.all(
-      ["/products", "/requests", "/auctions", "/orders"].map((p) => api(p)),
+      ["/products", "/requests", "/auctions", "/orders"].map(safe),
     );
-      const groups =
-      user?.role === "admin" ? await api("/groups").catch(() => []) : [];
+    const groups = user?.role === "admin" ? await safe("/groups") : [];
+    if (failed.length)
+      setTimeout(() => setError("Some data could not load. " + failed.join(" | ")), 0);
     return { products, requests, auctions, orders, groups };
   }
   useEffect(() => {
@@ -790,6 +800,15 @@ function App({ session, onSignOut }) {
                   ))}
                 </div>
               )}
+              {user?.role === "admin" ? (
+                <StockRequestGroups
+                  requests={data.requests}
+                  selected={selected}
+                  setSelected={setSelected}
+                  busy={busy}
+                />
+              ) : (
+              <>
               <h2>Submitted requests</h2>
               <div className="table-wrap">
                 <table>
@@ -841,6 +860,8 @@ function App({ session, onSignOut }) {
                   </p>
                 )}
               </div>
+              </>
+              )}
               {user?.role === "admin" && (
                 <form
                   className="auction-form"

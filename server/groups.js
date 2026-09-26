@@ -7,33 +7,34 @@
 // Requests that are not yet in an auction are grouped by product and area.
 // Once the admin opens an auction, the requests in that auction form their
 // own group, so a later batch of the same product starts a new group.
-
+ 
 import { requireRole } from "./service.js";
-
+ 
 export const GROUP_STATUSES = [
   "Awaiting Contributions",
   "Ready for Bidding",
+  "On Auction",
   "Bid Selected",
   "Completed",
 ];
-
+ 
 // Short, stable group code such as BG-4F2A91, built from the group key.
 const groupCode = (key) => {
   let hash = 0;
   for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   return "BG-" + hash.toString(16).toUpperCase().padStart(8, "0").slice(-6);
 };
-
+ 
 const groupStatus = (group) => {
   if (group.auctionId) {
     if (group.orderStatus === "completed") return "Completed";
     if (group.auctionStatus === "awarded" || group.orderStatus)
       return "Bid Selected";
-    return "Ready for Bidding";
+    return "On Auction";
   }
   return group.awaiting ? "Awaiting Contributions" : "Ready for Bidding";
 };
-
+ 
 export async function buyingGroups(db, u) {
   requireRole(u, "admin");
   const { rows } = await db.query(
@@ -51,6 +52,8 @@ export async function buyingGroups(db, u) {
       ar.auction_id,
       a.status AS auction_status,
       bo.status AS order_status,
+      ROUND(bo.subtotal * 100)::integer AS winning_bid_cents,
+      ROUND(bo.supplier_fee_amount * 100)::integer AS platform_fee_cents,
       ROUND(
         COALESCE(
           c.total,
@@ -64,7 +67,7 @@ export async function buyingGroups(db, u) {
      LEFT JOIN public.auction_requests ar ON ar.request_id = r.id
      LEFT JOIN public.auctions a ON a.id = ar.auction_id
      LEFT JOIN LATERAL (
-       SELECT o.status
+       SELECT o.status, o.subtotal, o.supplier_fee_amount
        FROM public.bulk_orders o
        WHERE o.auction_id = a.id
        ORDER BY o.created_at DESC
@@ -78,7 +81,7 @@ export async function buyingGroups(db, u) {
      WHERE r.status <> 'cancelled'
      ORDER BY r.created_at`,
   );
-
+ 
   const groups = new Map();
   for (const r of rows) {
     const key = r.auction_id
@@ -94,12 +97,19 @@ export async function buyingGroups(db, u) {
         auctionId: r.auction_id || null,
         auctionStatus: r.auction_status || null,
         orderStatus: r.order_status || null,
+        winningBidCents:
+          r.winning_bid_cents == null ? null : Number(r.winning_bid_cents),
+        platformFeeCents:
+          r.platform_fee_cents == null ? null : Number(r.platform_fee_cents),
         awaiting: false,
         createdAt: r.created_at,
+        openRequestIds: [],
         shops: new Map(),
       });
     const g = groups.get(key);
     if (r.status === "pending_commitment") g.awaiting = true;
+    // Requests ready to go into an auction (shown as "submitted" in the app).
+    if (!r.auction_id && r.status === "funded") g.openRequestIds.push(r.id);
     if (!g.shops.has(r.shop_id))
       g.shops.set(r.shop_id, {
         shopId: r.shop_id,
@@ -111,12 +121,32 @@ export async function buyingGroups(db, u) {
     shop.quantity += Number(r.quantity);
     shop.contributionCents += Number(r.contribution_cents);
   }
-
+ 
   return [...groups.values()]
     .map((g) => {
       const shops = [...g.shops.values()].sort((a, b) =>
         a.shopName.localeCompare(b.shopName),
       );
+      const status = groupStatus(g);
+      const contributionCents = shops.reduce(
+        (sum, s) => sum + s.contributionCents,
+        0,
+      );
+      // Savings are shown only for completed groups.
+      // Savings = total shop contributions minus the winning bid.
+      // Platform fee = 10% of the winning bid.
+      let savings = null;
+      if (status === "Completed" && g.winningBidCents != null) {
+        const platformFeeCents =
+          g.platformFeeCents ?? Math.round(g.winningBidCents * 0.1);
+        savings = {
+          contributionCents,
+          winningBidCents: g.winningBidCents,
+          savingsCents: contributionCents - g.winningBidCents,
+          platformFeeCents,
+          supplierPayoutCents: g.winningBidCents - platformFeeCents,
+        };
+      }
       return {
         key: g.key,
         code: g.code,
@@ -124,7 +154,8 @@ export async function buyingGroups(db, u) {
         product: g.product,
         pack: g.pack,
         area: g.area,
-        status: groupStatus(g),
+        status,
+        savings,
         shopCount: shops.length,
         totalQuantity: shops.reduce((sum, s) => sum + s.quantity, 0),
         contributionCents: shops.reduce(
@@ -132,6 +163,7 @@ export async function buyingGroups(db, u) {
           0,
         ),
         createdAt: g.createdAt,
+        openRequestIds: g.openRequestIds,
         shops,
       };
     })
