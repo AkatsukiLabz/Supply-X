@@ -24,54 +24,53 @@ export const uid = () => Math.random().toString(36).slice(2, 10);
    final price honest. Change to per-area later if logistics differ. */
 export const DELIVERY_FEE_CENTS = 4500;
 
-/* Seeded catalogue. products.shipsFrom must match an AREAS entry from
-   auth.js so grouping matches everywhere else in the app. */
+/* Fallback spaza catalogue for local demo/offline work. In connected mode,
+   ShopsPage uses /api/products first so the storefront follows the database. */
 export const seedProducts = (AREAS) => {
   const a = (i) => AREAS[i % AREAS.length];
   return [
     {
-      id: "p_bolts",
-      name: "Hex Bolts (Grade 8.8)",
-      category: "Fasteners",
-      pack: "Box of 100",
-      referenceCents: 45000,
+      id: "p_cooking_oil",
+      name: "Cooking oil",
+      category: "Groceries",
+      pack: "6 x 750 ml case",
+      referenceCents: 18000,
       shipsFrom: a(0),
       variants: [
-        { id: "v1", label: "M6 × 30mm", deltaCents: 0 },
-        { id: "v2", label: "M8 × 40mm", deltaCents: 1200 },
-        { id: "v3", label: "M10 × 60mm", deltaCents: 2800 },
+        { id: "v1", label: "750 ml bottles", deltaCents: 0 },
+        { id: "v2", label: "2 L bottles", deltaCents: 4200 },
       ],
     },
     {
-      id: "p_helmets",
-      name: "Safety Helmets",
-      category: "PPE",
-      pack: "Each",
-      referenceCents: 18500,
+      id: "p_maize_meal",
+      name: "Maize meal",
+      category: "Staples",
+      pack: "10 kg bag",
+      referenceCents: 12500,
       shipsFrom: a(1),
       variants: [
-        { id: "v1", label: "Standard white", deltaCents: 0 },
-        { id: "v2", label: "Vented yellow", deltaCents: 2500 },
+        { id: "v1", label: "10 kg bag", deltaCents: 0 },
+        { id: "v2", label: "12.5 kg bag", deltaCents: 2500 },
       ],
     },
     {
-      id: "p_pipe",
-      name: "PVC Pipe 6m",
-      category: "Plumbing",
-      pack: "Length",
-      referenceCents: 32000,
+      id: "p_sugar",
+      name: "Sugar",
+      category: "Staples",
+      pack: "10 x 1 kg case",
+      referenceCents: 21000,
       shipsFrom: a(2),
       variants: [
-        { id: "v1", label: "50mm", deltaCents: 0 },
-        { id: "v2", label: "110mm", deltaCents: 14000 },
+        { id: "v1", label: "1 kg bags", deltaCents: 0 },
+        { id: "v2", label: "2 kg bags", deltaCents: 3200 },
       ],
     },
     {
-      id: "p_gloves",
-      name: "Work Gloves",
-      category: "PPE",
-      pack: "Pair",
-      referenceCents: 3800,
+      id: "p_rice",
+      name: "Rice",
+      category: "Staples",
+      pack: "10 kg bag",
+      referenceCents: 16500,
       shipsFrom: a(0),
       variants: [],
     },

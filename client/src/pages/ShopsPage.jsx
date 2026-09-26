@@ -1,73 +1,90 @@
-import React, { useEffect, useState } from "react";
-import { AREAS } from "./auth.js";
+import React, { useEffect, useMemo, useState } from "react";
+import { AREAS } from "../auth.js";
 import {
   DELIVERY_FEE_CENTS,
   loadShop,
   saveShop,
   seedProducts,
   uid,
-} from "./shopStore.js";
+} from "../shopStore.js";
+import { money } from "../utils/formatters.js";
 
-const money = (c) =>
-  new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(
-    c / 100,
-  );
+const fallbackProducts = seedProducts(AREAS);
 
-const PRODUCTS = seedProducts(AREAS);
+const lineTotal = (line) => line.unitPriceCents * line.qty;
 
-const lineTotal = (l) => l.unitPriceCents * l.qty;
+const normalizeApiProduct = (product, index) => ({
+  id: product.id,
+  name: product.name,
+  category: product.category || "Spaza stock",
+  pack: product.pack,
+  referenceCents: product.reference_cents || product.referenceCents || 0,
+  shipsFrom: product.area || AREAS[index % AREAS.length],
+  variants: product.variants || [],
+});
 
-export default function Shops({ user }) {
+export default function ShopsPage({ user, products: apiProducts = [] }) {
   const [shop, setShop] = useState(() => loadShop(user.id));
-  const [area, setArea] = useState(AREAS[0]);
+  const [area, setArea] = useState(user.area || AREAS[0]);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => saveShop(user.id, shop), [user.id, shop]);
 
-  const products = PRODUCTS.filter((p) => p.shipsFrom === area);
-  const subtotal = shop.cart.reduce((s, l) => s + lineTotal(l), 0);
-  const finalPrice =
-    shop.cart.length > 0 ? subtotal + DELIVERY_FEE_CENTS : 0;
+  const catalogue = useMemo(
+    () =>
+      apiProducts.length
+        ? apiProducts.map(normalizeApiProduct)
+        : fallbackProducts,
+    [apiProducts],
+  );
+
+  const products = catalogue.filter((product) => product.shipsFrom === area);
+  const visibleProducts = products.length ? products : catalogue;
+  const subtotal = shop.cart.reduce((sum, line) => sum + lineTotal(line), 0);
+  const finalPrice = shop.cart.length > 0 ? subtotal + DELIVERY_FEE_CENTS : 0;
   const shortfall = finalPrice - shop.balanceCents;
 
   const addToCart = (product, variantId) => {
     const variant = product.variants.find((v) => v.id === variantId);
     const unitPriceCents = product.referenceCents + (variant?.deltaCents ?? 0);
-    setShop((s) => {
-      const existing = s.cart.find(
-        (l) => l.productId === product.id && l.variantId === variantId,
+    setShop((current) => {
+      const existing = current.cart.find(
+        (line) => line.productId === product.id && line.variantId === variantId,
       );
       const cart = existing
-        ? s.cart.map((l) =>
-            l === existing ? { ...l, qty: l.qty + 1 } : l,
+        ? current.cart.map((line) =>
+            line === existing ? { ...line, qty: line.qty + 1 } : line,
           )
         : [
-            ...s.cart,
+            ...current.cart,
             {
               id: uid(),
               productId: product.id,
               name: product.name,
               pack: product.pack,
+              variantId,
               variantLabel: variant?.label,
               unitPriceCents,
               qty: 1,
               shipsFrom: product.shipsFrom,
             },
           ];
-      return { ...s, cart };
+      return { ...current, cart };
     });
     setError("");
     setNotice(`${product.name} added to your order.`);
   };
 
   const updateQty = (lineId, qty) =>
-    setShop((s) => ({
-      ...s,
+    setShop((current) => ({
+      ...current,
       cart:
         qty <= 0
-          ? s.cart.filter((l) => l.id !== lineId)
-          : s.cart.map((l) => (l.id === lineId ? { ...l, qty } : l)),
+          ? current.cart.filter((line) => line.id !== lineId)
+          : current.cart.map((line) =>
+              line.id === lineId ? { ...line, qty } : line,
+            ),
     }));
 
   const placeOrder = () => {
@@ -76,8 +93,9 @@ export default function Shops({ user }) {
     if (!shop.cart.length) return setError("Your order is empty.");
     if (shortfall > 0)
       return setError(
-        `Insufficient wallet balance — top up ${money(shortfall)} more.`,
+        `Insufficient wallet balance. Top up ${money(shortfall)} more.`,
       );
+
     const order = {
       id: uid(),
       area,
@@ -87,90 +105,90 @@ export default function Shops({ user }) {
       status: "pending",
       createdAt: Date.now(),
     };
-    setShop((s) => ({
-      ...s,
+    setShop((current) => ({
+      ...current,
       cart: [],
-      orders: [order, ...s.orders],
-      balanceCents: s.balanceCents - order.totalCents,
+      orders: [order, ...current.orders],
+      balanceCents: current.balanceCents - order.totalCents,
       txns: [
         {
           id: uid(),
           type: "debit",
           amountCents: order.totalCents,
-          note: `Order ${order.id} — ships from ${order.area}`,
+          note: `Order ${order.id} - ships from ${order.area}`,
           createdAt: Date.now(),
         },
-        ...s.txns,
+        ...current.txns,
       ],
     }));
-    setNotice("Order placed — wallet debited. It is now pending fulfilment.");
+    setNotice("Order placed. Wallet debited and order is pending fulfilment.");
   };
 
   const cancelOrder = (orderId) =>
-    setShop((s) => {
-      const order = s.orders.find((o) => o.id === orderId);
-      if (!order || order.status !== "pending") return s;
+    setShop((current) => {
+      const order = current.orders.find((item) => item.id === orderId);
+      if (!order || order.status !== "pending") return current;
       return {
-        ...s,
-        orders: s.orders.map((o) =>
-          o.id === orderId ? { ...o, status: "cancelled" } : o,
+        ...current,
+        orders: current.orders.map((item) =>
+          item.id === orderId ? { ...item, status: "cancelled" } : item,
         ),
-        balanceCents: s.balanceCents + order.totalCents,
+        balanceCents: current.balanceCents + order.totalCents,
         txns: [
           {
             id: uid(),
             type: "refund",
             amountCents: order.totalCents,
-            note: `Refund — cancelled order ${orderId}`,
+            note: `Refund - cancelled order ${orderId}`,
             createdAt: Date.now(),
           },
-          ...s.txns,
+          ...current.txns,
         ],
       };
     });
 
   const confirmReceipt = (orderId) =>
-    setShop((s) => ({
-      ...s,
-      orders: s.orders.map((o) =>
-        o.id === orderId ? { ...o, status: "fulfilled" } : o,
+    setShop((current) => ({
+      ...current,
+      orders: current.orders.map((order) =>
+        order.id === orderId ? { ...order, status: "fulfilled" } : order,
       ),
     }));
 
-  const pending = shop.orders.filter((o) => o.status === "pending");
+  const pending = shop.orders.filter((order) => order.status === "pending");
 
   return (
     <>
       <div className="section-title">
         <h2>Shop by area</h2>
         <span>
-          {products.length} products shipping from {area}
+          {visibleProducts.length} products {products.length ? `in ${area}` : "available"}
         </span>
       </div>
       <div className="area-tabs">
-        {AREAS.map((a) => (
+        {AREAS.map((option) => (
           <button
-            key={a}
-            className={a === area ? "active" : ""}
-            onClick={() => setArea(a)}
+            key={option}
+            className={option === area ? "active" : ""}
+            onClick={() => setArea(option)}
           >
-            {a}
+            {option}
           </button>
         ))}
       </div>
 
       <div className="products">
-        {products.map((p) => (
-          <ProductCard key={p.id} product={p} onAdd={addToCart} />
+        {visibleProducts.map((product) => (
+          <ProductCard key={product.id} product={product} onAdd={addToCart} />
         ))}
-        {!products.length && (
-          <p className="empty">Nothing ships from {area} yet.</p>
+        {!visibleProducts.length && (
+          <p className="empty">No products are available yet.</p>
         )}
       </div>
 
       <div className="order-panel">
         <div className="section-title">
-          <h2>Your order — {area}</h2>
+          <h2>Your order</h2>
           <span>{shop.cart.length} lines</span>
         </div>
         {error && (
@@ -183,24 +201,24 @@ export default function Shops({ user }) {
             {notice}
           </div>
         )}
-        {shop.cart.map((l) => (
-          <div className="allocation" key={l.id}>
-            <strong>{l.name}</strong>
+        {shop.cart.map((line) => (
+          <div className="allocation" key={line.id}>
+            <strong>{line.name}</strong>
             <p>
-              {l.variantLabel ? `${l.variantLabel} · ` : ""}
-              {money(l.unitPriceCents)} × {l.qty} ={" "}
-              <strong>{money(lineTotal(l))}</strong>
+              {line.variantLabel ? `${line.variantLabel} · ` : ""}
+              {money(line.unitPriceCents)} × {line.qty} ={" "}
+              <strong>{money(lineTotal(line))}</strong>
             </p>
             <span className="qty-controls">
               <button
                 className="secondary"
-                onClick={() => updateQty(l.id, l.qty - 1)}
+                onClick={() => updateQty(line.id, line.qty - 1)}
               >
                 −
               </button>
               <button
                 className="secondary"
-                onClick={() => updateQty(l.id, l.qty + 1)}
+                onClick={() => updateQty(line.id, line.qty + 1)}
               >
                 +
               </button>
@@ -223,9 +241,7 @@ export default function Shops({ user }) {
                 </>
               )}
             </p>
-            <button onClick={placeOrder}>
-              Place order · {money(finalPrice)}
-            </button>
+            <button onClick={placeOrder}>Place order · {money(finalPrice)}</button>
           </>
         )}
       </div>
@@ -235,28 +251,28 @@ export default function Shops({ user }) {
         <span>{pending.length} awaiting fulfilment</span>
       </div>
       <div className="cards">
-        {pending.map((o) => (
-          <article key={o.id}>
+        {pending.map((order) => (
+          <article key={order.id}>
             <div className="card-top">
-              <span className="pill">{o.status}</span>
-              <span>{o.area}</span>
+              <span className="pill">{order.status}</span>
+              <span>{order.area}</span>
             </div>
-            <h2>Order {o.id}</h2>
-            {o.lines.map((l) => (
-              <p className="muted" key={l.id}>
-                {l.qty} × {l.name}
-                {l.variantLabel ? ` · ${l.variantLabel}` : ""} ·{" "}
-                {money(lineTotal(l))}
+            <h2>Order {order.id}</h2>
+            {order.lines.map((line) => (
+              <p className="muted" key={line.id}>
+                {line.qty} × {line.name}
+                {line.variantLabel ? ` · ${line.variantLabel}` : ""} ·{" "}
+                {money(lineTotal(line))}
               </p>
             ))}
             <p>
-              Total delivered price <strong>{money(o.totalCents)}</strong>
+              Total delivered price <strong>{money(order.totalCents)}</strong>
             </p>
             <div className="bid-actions">
-              <button onClick={() => confirmReceipt(o.id)}>
+              <button onClick={() => confirmReceipt(order.id)}>
                 Confirm receipt
               </button>
-              <button className="secondary" onClick={() => cancelOrder(o.id)}>
+              <button className="secondary" onClick={() => cancelOrder(order.id)}>
                 Cancel order
               </button>
             </div>
@@ -275,7 +291,7 @@ export default function Shops({ user }) {
 
 function ProductCard({ product, onAdd }) {
   const [variantId, setVariantId] = useState(product.variants[0]?.id);
-  const variant = product.variants.find((v) => v.id === variantId);
+  const variant = product.variants.find((item) => item.id === variantId);
   const retail = product.referenceCents + (variant?.deltaCents ?? 0);
 
   return (
@@ -283,18 +299,18 @@ function ProductCard({ product, onAdd }) {
       <div className="product-icon">▧</div>
       <h3>{product.name}</h3>
       <p>{product.pack}</p>
-      <p className="muted">📍 Ships from {product.shipsFrom}</p>
+      <p className="muted">Ships from {product.shipsFrom}</p>
       {product.variants.length > 0 && (
         <select
           aria-label={`Spec for ${product.name}`}
           value={variantId}
-          onChange={(e) => setVariantId(e.target.value)}
+          onChange={(event) => setVariantId(event.target.value)}
         >
-          {product.variants.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.label}
-              {v.deltaCents !== 0
-                ? ` (${v.deltaCents > 0 ? "+" : ""}${money(v.deltaCents)})`
+          {product.variants.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+              {item.deltaCents !== 0
+                ? ` (${item.deltaCents > 0 ? "+" : ""}${money(item.deltaCents)})`
                 : ""}
             </option>
           ))}
@@ -302,8 +318,8 @@ function ProductCard({ product, onAdd }) {
       )}
       <small>Retail: {money(retail)}</small>
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
+        onSubmit={(event) => {
+          event.preventDefault();
           onAdd(product, variantId);
         }}
       >

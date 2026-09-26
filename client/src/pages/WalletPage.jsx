@@ -1,33 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { loadShop, saveShop, uid } from "./shopStore.js";
+import { loadShop, saveShop, uid } from "../shopStore.js";
+import { money, parseRandCents } from "../utils/formatters.js";
 
-const money = (c) =>
-  new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(
-    c / 100,
-  );
-
-const parseRandCents = (value) => {
-  const normalized = String(value).replace(/[^0-9,.]/g, "").replace(",", ".");
-  const amount = Number(normalized);
-  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
-};
-
-export default function Wallet({ user }) {
+export default function WalletPage({ user }) {
   const [shop, setShop] = useState(() => loadShop(user.id));
   const [error, setError] = useState("");
 
   useEffect(() => saveShop(user.id, shop), [user.id, shop]);
 
-  const topUp = (e) => {
-    e.preventDefault();
+  const topUp = (event) => {
+    event.preventDefault();
     const cents = parseRandCents(
-      new FormData(e.currentTarget).get("amount"),
+      new FormData(event.currentTarget).get("amount"),
     );
     if (cents <= 0) return setError("Enter an amount above R0.");
     setError("");
-    setShop((s) => ({
-      ...s,
-      balanceCents: s.balanceCents + cents,
+    setShop((current) => ({
+      ...current,
+      balanceCents: current.balanceCents + cents,
       txns: [
         {
           id: uid(),
@@ -36,10 +26,10 @@ export default function Wallet({ user }) {
           note: "Wallet top-up",
           createdAt: Date.now(),
         },
-        ...s.txns,
+        ...current.txns,
       ],
     }));
-    e.currentTarget.reset();
+    event.currentTarget.reset();
   };
 
   return (
@@ -53,7 +43,7 @@ export default function Wallet({ user }) {
           <span>Pending orders</span>
           <strong>
             {String(
-              shop.orders.filter((o) => o.status === "pending").length,
+              shop.orders.filter((order) => order.status === "pending").length,
             ).padStart(2, "0")}
           </strong>
         </article>
@@ -98,16 +88,16 @@ export default function Wallet({ user }) {
             </tr>
           </thead>
           <tbody>
-            {shop.txns.map((t) => (
-              <tr key={t.id}>
-                <td>{t.note}</td>
+            {shop.txns.map((txn) => (
+              <tr key={txn.id}>
+                <td>{txn.note}</td>
                 <td>
-                  <span className="pill">{t.type}</span>
+                  <span className="pill">{txn.type}</span>
                 </td>
                 <td>
                   <strong>
-                    {t.type === "debit" ? "−" : "+"}
-                    {money(t.amountCents)}
+                    {txn.type === "debit" ? "-" : "+"}
+                    {money(txn.amountCents)}
                   </strong>
                 </td>
               </tr>

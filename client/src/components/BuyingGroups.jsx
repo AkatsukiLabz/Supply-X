@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { money } from "../utils/formatters.js";
 
 // Admin "Buying groups" section.
 // Shows every buying group (same product, same area) and lets the admin
@@ -16,7 +17,7 @@ const StatusPill = ({ status }) => (
   <span className={statusClass[status] || "group-status"}>{status}</span>
 );
 
-export default function BuyingGroups({ groups, money, busy, onRefresh }) {
+export default function BuyingGroups({ groups, busy, onRefresh }) {
   const [openKey, setOpenKey] = useState(null);
   const group = groups.find((g) => g.key === openKey);
 
