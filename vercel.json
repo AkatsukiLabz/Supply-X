@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm ci",
+  "env": {
+    "NODE_ENV": "production",
+    "AUTH_MODE": "demo"
+  },
+  "functions": {
+    "server/index.js": {
+      "runtime": "nodejs22.x"
+    }
+  }
+}
