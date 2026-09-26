@@ -1,7 +1,10 @@
 import { authHeaders } from "../auth.js";
+import { staticDemoApi } from "./staticDemo.js";
 
 export function createApiClient(session, onUnauthorized) {
   return async function api(path, body) {
+    if (session?.staticDemo) return staticDemoApi(path, body, session);
+
     const response = await fetch("/api" + path, {
       method: body === undefined ? "GET" : "POST",
       headers: {

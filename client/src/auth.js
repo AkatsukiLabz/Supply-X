@@ -118,8 +118,11 @@ export function authHeaders(session) {
 // ---------- API helpers ----------
 
 export async function getMode() {
-  const r = await fetch("/api/health");
-  if (!r.ok) throw Error("SupplyX is not reachable right now. Try again soon.");
+  const r = await fetch("/api/health").catch(() => null);
+  if (!r?.ok) {
+    runtimeConfig = {};
+    return "demo";
+  }
   const health = await r.json();
   runtimeConfig = {
     supabaseUrl: (health.supabaseUrl || "").replace(/\/$/, ""),
@@ -148,8 +151,13 @@ export async function signIn({ email, password, mode }) {
     const account = DEMO_ACCOUNTS.find((a) => a.email === email);
     if (!account || password !== DEMO_PASSWORD)
       throw Error("Incorrect email or password.");
-    const user = await fetchProfile({ "x-demo-user": account.id });
-    session = { mode, user };
+    const user = await fetchProfile({ "x-demo-user": account.id }).catch(
+      () => ({
+        ...account,
+        area: "Centurion",
+      }),
+    );
+    session = { mode, user, staticDemo: true };
   } else {
     const { url, key } = supabaseConfig();
     if (!url || !key)
