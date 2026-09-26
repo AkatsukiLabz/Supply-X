@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
-  DEMO_ACCOUNTS,
-  DEMO_PASSWORD,
   getMode,
   signIn,
   saveSession,
   requestPasswordReset,
-  roleLabel,
 } from "./auth.js";
 import "./login.css";
 
@@ -51,14 +48,6 @@ export default function Login({ onSignIn, onShowSignup }) {
       setError(err.message);
     }
   }
-
-  function fillDemo(account) {
-    setEmail(account.email);
-    setPassword(DEMO_PASSWORD);
-    setError("");
-    setNotice("");
-  }
-
 
   return (
     <div className="login">
@@ -169,25 +158,6 @@ export default function Login({ onSignIn, onShowSignup }) {
             </button>
           </p>
 
-          {mode === "demo" && (
-            <div className="demo-box">
-              <strong>Local demo accounts</strong>
-              <small>
-                Click one to fill the form. Password for all:{" "}
-                <code>{DEMO_PASSWORD}</code>
-              </small>
-              <ul>
-                {DEMO_ACCOUNTS.map((a) => (
-                  <li key={a.email}>
-                    <button type="button" onClick={() => fillDemo(a)}>
-                      <span>{a.name}</span>
-                      <em>{roleLabel(a.role)}</em>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </form>
       </section>
     </div>
