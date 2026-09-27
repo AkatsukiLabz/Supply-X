@@ -188,6 +188,10 @@ export async function staticDemoApi(path, body, session) {
   const user = userFromSession(session);
 
   if (path === "/me") return user;
+  if (path === "/me/documents/status")
+    return { bankConfirmation: false, tradingProof: false };
+  if (path === "/me/documents") return { ok: true };
+  if (path === "/admin/suppliers") return [];
   if (path === "/products") return products;
   if (path === "/requests" && body) {
     const product = products.find((item) => item.id === body.productId);

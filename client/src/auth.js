@@ -22,7 +22,7 @@ let runtimeConfig = {};
 // development, or a single combined deployment). A GitHub Pages deployment
 // only hosts the frontend files, so it needs VITE_API_URL set at build time
 // to the real backend's address, e.g. https://supplyx-api.onrender.com
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+export const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 export const apiUrl = (path) => `${API_BASE}/api${path}`;
 
 const viteSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(

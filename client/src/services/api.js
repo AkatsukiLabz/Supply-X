@@ -1,7 +1,10 @@
-import { apiUrl, authHeaders } from "../auth.js";
+import { API_BASE, apiUrl, authHeaders } from "../auth.js";
+import { staticDemoApi } from "./staticDemo.js";
 
 export function createApiClient(session, onUnauthorized) {
   async function api(path, body) {
+    if (!API_BASE) return staticDemoApi(path, body, session);
+
     const response = await fetch(apiUrl(path), {
       method: body === undefined ? "GET" : "POST",
       headers: {
@@ -30,6 +33,9 @@ export function createApiClient(session, onUnauthorized) {
   // For a non-JSON response (a file). Carries the same auth header as api()
   // and surfaces the server's real error message instead of a generic one.
   api.download = async function download(path) {
+    if (!API_BASE)
+      throw Error("Documents are only available when the backend is running.");
+
     const response = await fetch(apiUrl(path), {
       headers: authHeaders(session),
     });
