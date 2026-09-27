@@ -118,10 +118,12 @@ export function authHeaders(session) {
 // ---------- API helpers ----------
 
 export async function getMode() {
+  const builtConfig = supabaseConfig();
+
   const r = await fetch("/api/health").catch(() => null);
   if (!r?.ok) {
     runtimeConfig = {};
-    return "demo";
+    return builtConfig.url && builtConfig.key ? "supabase" : "demo";
   }
   const health = await r.json();
   runtimeConfig = {
