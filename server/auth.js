@@ -85,46 +85,29 @@ const createPublicProfile = async (db, profile) =>
     return publicProfile(tx, profile.id);
   });
 
-export function authentication(db, { mode = "demo", supabaseUrl } = {}) {
-  if (!["demo", "supabase"].includes(mode))
-    throw Error("AUTH_MODE must be demo or supabase");
-  if (mode === "demo" && process.env.NODE_ENV === "production")
-    throw Error("Demo authentication is forbidden in production");
-  if (mode === "supabase" && !supabaseUrl?.startsWith("https://"))
+export function authentication(db, { supabaseUrl } = {}) {
+  if (!supabaseUrl?.startsWith("https://"))
     throw Error("SUPABASE_URL is required");
-  const issuer = supabaseUrl?.replace(/\/$/, "") + "/auth/v1";
-  const keys =
-    mode === "supabase"
-      ? createRemoteJWKSet(new URL(issuer + "/.well-known/jwks.json"))
-      : null;
+  const issuer = supabaseUrl.replace(/\/$/, "") + "/auth/v1";
+  const keys = createRemoteJWKSet(new URL(issuer + "/.well-known/jwks.json"));
   return async (req, res, next) => {
     let id, payload;
-    if (mode === "demo") id = req.get("x-demo-user");
-    else {
-      try {
-        const token = req.get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
-        if (!token) throw Error();
-        payload = (
-          await jwtVerify(token, keys, { issuer, audience: "authenticated" })
-        ).payload;
-        id = payload.sub;
-      } catch {
-        return res
-          .status(401)
-          .json({ error: "A valid sign-in session is required" });
-      }
+    try {
+      const token = req.get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+      if (!token) throw Error();
+      payload = (
+        await jwtVerify(token, keys, { issuer, audience: "authenticated" })
+      ).payload;
+      id = payload.sub;
+    } catch {
+      return res
+        .status(401)
+        .json({ error: "A valid sign-in session is required" });
     }
     if (!id || !/^[0-9a-f-]{36}$/i.test(id))
       return res.status(401).json({ error: "Sign in to continue" });
-    let user;
-    if (mode === "supabase") user = await publicProfile(db, id);
-    else
-      user = (
-        await db.query("SELECT id,name,role,area FROM supplyx.users WHERE id=$1", [
-          id,
-        ])
-      ).rows[0];
-    if (!user && mode === "supabase") {
+    let user = await publicProfile(db, id);
+    if (!user) {
       const profile = signupProfile(payload);
       if (profile) user = await createPublicProfile(db, profile);
     }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  getMode,
+  loadRuntimeConfig,
   signIn,
   saveSession,
   requestPasswordReset,
@@ -8,7 +8,7 @@ import {
 import "./login.css";
 
 export default function Login({ onSignIn, onShowSignup }) {
-  const [mode, setMode] = useState("");
+  const [ready, setReady] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -18,8 +18,8 @@ export default function Login({ onSignIn, onShowSignup }) {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    getMode()
-      .then(setMode)
+    loadRuntimeConfig()
+      .then(() => setReady(true))
       .catch((e) => setError(e.message));
   }, []);
 
@@ -29,7 +29,7 @@ export default function Login({ onSignIn, onShowSignup }) {
     setError("");
     setNotice("");
     try {
-      const session = await signIn({ email, password, mode });
+      const session = await signIn({ email, password });
       saveSession(session, remember);
       onSignIn(session);
     } catch (err) {
@@ -43,7 +43,7 @@ export default function Login({ onSignIn, onShowSignup }) {
     setError("");
     setNotice("");
     try {
-      setNotice(await requestPasswordReset(email, mode));
+      setNotice(await requestPasswordReset(email));
     } catch (err) {
       setError(err.message);
     }
@@ -147,7 +147,7 @@ export default function Login({ onSignIn, onShowSignup }) {
             </div>
           )}
 
-          <button className="login-submit" disabled={busy || !mode}>
+          <button className="login-submit" disabled={busy || !ready}>
           {busy ? "Signing in…" : "Sign in"}
           </button>
 

@@ -21,7 +21,6 @@ const emptyData = {
 export default function App({ session, onSignOut }) {
   const user = session.user;
   const userId = user.id;
-  const mode = session.mode;
   const api = createApiClient(session, onSignOut);
 
   const [data, setData] = useState(emptyData);
@@ -165,7 +164,7 @@ export default function App({ session, onSignOut }) {
       />
     );
   } else if (activeTab === "Overview" && user?.role === "admin") {
-    page = <AdminOverview data={data} setTab={setTab} />;
+    page = <AdminOverview data={data} setTab={setTab} busy={busy} api={api} act={act} />;
   } else if (activeTab === "Overview" && isShop(user?.role)) {
     page = <ShopOverview user={user} onGoTo={setTab} />;
   } else if (activeTab === "Buying groups" && user?.role === "admin") {
@@ -210,7 +209,6 @@ export default function App({ session, onSignOut }) {
   return (
     <AppShell
       user={user}
-      mode={mode}
       tabs={tabs}
       activeTab={activeTab}
       setTab={setTab}

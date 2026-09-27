@@ -1,1 +1,63 @@
 /* Supplier workspace styles live here. */
+
+.supplier-documents {
+  margin-top: 28px;
+}
+.document-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+.document-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e3e8dd;
+  border-radius: 10px;
+  background: #fff;
+}
+.document-row-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #183b31;
+}
+.pill-ok {
+  color: #194f3d;
+  background: #e8f1e3;
+}
+.pill-warn {
+  color: #8a3b1f;
+  background: #fbeee6;
+}
+.document-row .file-input-wrapper {
+  position: relative;
+  display: block;
+  min-width: 220px;
+}
+.document-row .file-input-wrapper input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.document-row .file-input-wrapper .file-name {
+  display: block;
+  padding: 8px 12px;
+  border: 1px solid #d4dcd4;
+  border-radius: 7px;
+  background: #fff;
+  color: #6b7b73;
+  font-size: 13px;
+}
+.document-row .file-input-wrapper:hover .file-name {
+  border-color: #90af48;
+}

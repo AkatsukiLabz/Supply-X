@@ -90,26 +90,6 @@ const VERIFY_FIELDS = {
   trading: "trading_proof_verified",
 };
 
-async function signedDocUrl(supabaseUrl, serviceRoleKey, path) {
-  if (!path || !supabaseUrl || !serviceRoleKey) return null;
-  const response = await fetch(
-    `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/sign/supplier-documents/${path}`,
-    {
-      method: "POST",
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ expiresIn: 3600 }),
-    },
-  );
-  if (!response.ok) return null;
-  const body = await response.json().catch(() => ({}));
-  if (!body.signedURL) return null;
-  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1${body.signedURL}`;
-}
-
 export function service(
   db,
   clock = () => new Date(),
@@ -601,18 +581,101 @@ export function service(
         )
       ).rows;
       for (const supplier of rows) {
-        supplier.bank_confirmation_url = await signedDocUrl(
-          supabaseUrl,
-          supabaseServiceRoleKey,
+        // A path on file means the supplier really did upload a document.
+        // Admin opens it through /admin/suppliers/:id/documents/:field
+        // rather than a link here, so this list only needs to say whether
+        // one exists.
+        supplier.bank_confirmation_uploaded = Boolean(
           supplier.bank_confirmation_path,
         );
-        supplier.trading_proof_url = await signedDocUrl(
-          supabaseUrl,
-          supabaseServiceRoleKey,
-          supplier.trading_proof_path,
-        );
+        supplier.trading_proof_uploaded = Boolean(supplier.trading_proof_path);
       }
       return rows;
+    },
+
+    // Streams a supplier's verification document straight from storage using
+    // the service role key, so admin can open it without any client-side
+    // Supabase credentials and without a separate signed-URL step that can
+    // fail on its own. Any storage error is reported back with its real
+    // reason instead of a generic "not available".
+    async supplierDocument(u, supplierId, field) {
+      requireRole(u, "admin");
+      const column =
+        field === "bank"
+          ? "bank_confirmation_path"
+          : field === "trading"
+            ? "trading_proof_path"
+            : null;
+      if (!column) throw new Fault(400, "Unknown document");
+      const supplier = await one(
+        db,
+        `SELECT ${column} AS path FROM public.suppliers WHERE id=$1`,
+        [supplierId],
+      );
+      if (!supplier.path) throw new Fault(404, "No document has been uploaded");
+      if (!supabaseUrl || !supabaseServiceRoleKey)
+        throw new Fault(
+          500,
+          "The server is missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY, so it cannot fetch documents from storage",
+        );
+      const response = await fetch(
+        `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/supplier-documents/${supplier.path}`,
+        {
+          headers: {
+            apikey: supabaseServiceRoleKey,
+            Authorization: `Bearer ${supabaseServiceRoleKey}`,
+          },
+        },
+      );
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Fault(
+          502,
+          `Supabase Storage returned ${response.status} for this document. ${text}`.trim(),
+        );
+      }
+      return {
+        buffer: Buffer.from(await response.arrayBuffer()),
+        contentType: response.headers.get("content-type") || "application/octet-stream",
+      };
+    },
+
+    async ownDocumentsStatus(u) {
+      requireRole(u, "supplier");
+      const supplier = await currentSupplier(db, u.id);
+      return {
+        bankConfirmationUploaded: Boolean(supplier.bank_confirmation_path),
+        tradingProofUploaded: Boolean(supplier.trading_proof_path),
+      };
+    },
+
+    // Lets a signed-in supplier attach or replace their own verification
+    // documents at any time, not only during signup. This is what makes an
+    // existing account (created before this feature existed, or one whose
+    // signup upload did not finish) able to catch up.
+    async updateOwnDocuments(u, { bankConfirmationPath, tradingProofPath }) {
+      requireRole(u, "supplier");
+      const supplier = await currentSupplier(db, u.id);
+      const next = {
+        bankConfirmationPath: bankConfirmationPath || supplier.bank_confirmation_path,
+        tradingProofPath: tradingProofPath || supplier.trading_proof_path,
+      };
+      const row = await one(
+        db,
+        `UPDATE public.suppliers
+         SET bank_confirmation_path=$1,
+             trading_proof_path=$2,
+             bank_confirmation_verified = CASE WHEN $1 IS DISTINCT FROM bank_confirmation_path THEN false ELSE bank_confirmation_verified END,
+             trading_proof_verified = CASE WHEN $2 IS DISTINCT FROM trading_proof_path THEN false ELSE trading_proof_verified END,
+             verified_at = NULL
+         WHERE owner_id=$3
+         RETURNING id, bank_confirmation_path, trading_proof_path`,
+        [next.bankConfirmationPath || null, next.tradingProofPath || null, u.id],
+      );
+      return {
+        bankConfirmationUploaded: Boolean(row.bank_confirmation_path),
+        tradingProofUploaded: Boolean(row.trading_proof_path),
+      };
     },
 
     async verifySupplier(u, supplierId, field, verified) {

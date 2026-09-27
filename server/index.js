@@ -1,23 +1,13 @@
-import { database, seed } from "./db.js";
+import { database } from "./db.js";
 import { createApp } from "./app.js";
 import express from "express";
 import { fileURLToPath } from "node:url";
-import { mkdir } from "node:fs/promises";
-const mode = process.env.AUTH_MODE || "demo";
-if (mode === "demo" && process.env.NODE_ENV === "production")
-  throw Error("Demo mode cannot run in production");
-if (mode === "supabase" && !process.env.DATABASE_URL)
-  throw Error("Supabase mode requires DATABASE_URL");
-if (mode === "demo" && process.env.DATABASE_URL)
-  throw Error("Demo mode must use the local database; no remote demo seeding");
-await mkdir(new URL("../.data", import.meta.url), { recursive: true });
-const db = await database({
-  url: process.env.DATABASE_URL,
-  path: fileURLToPath(new URL("../.data/postgres", import.meta.url)),
-});
-if (mode === "demo") await seed(db);
+
+if (!process.env.DATABASE_URL) throw Error("DATABASE_URL is required");
+if (!process.env.SUPABASE_URL) throw Error("SUPABASE_URL is required");
+
+const db = await database({ url: process.env.DATABASE_URL });
 const app = createApp(db, {
-  mode,
   supabaseUrl: process.env.SUPABASE_URL,
   supabasePublishableKey:
     process.env.SUPABASE_PUBLISHABLE_KEY ||
@@ -27,9 +17,9 @@ const app = createApp(db, {
 });
 app.use(express.static(fileURLToPath(new URL("../dist", import.meta.url))));
 const port = Number(process.env.PORT || 3001),
-  host = mode === "demo" ? "127.0.0.1" : "0.0.0.0";
+  host = "0.0.0.0";
 const server = app.listen(port, host, () =>
-  console.log(`SupplyX: http://${host}:${port} (${mode})`),
+  console.log(`SupplyX: http://${host}:${port}`),
 );
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () =>

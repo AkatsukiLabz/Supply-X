@@ -1,8 +1,7 @@
 // SupplyX sign in helpers (frontend only).
 //
-// Sign in uses Supabase Auth when Supabase configuration is available.
-// Local demo mode no longer accepts hardcoded frontend credentials; it is only
-// kept as a backend development mode when the Express API is running locally.
+// Signs in with Supabase email and password, then sends
+// "Authorization: Bearer <token>" to the backend on every API call.
 
 export const ROLES = [
   { value: "spaza_owner",
@@ -17,7 +16,6 @@ export const roleLabel = (role) =>
 
 const KEY = "supplyx.session";
 let runtimeConfig = {};
-let backendAvailable = false;
 const viteSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(
   /\/$/,
   "",
@@ -73,31 +71,28 @@ export function clearSession() {
 // Headers every API call needs for the signed in user.
 export function authHeaders(session) {
   if (!session) return {};
-  return session.mode === "demo"
-    ? { "x-demo-user": session.user.id }
-    : { Authorization: `Bearer ${session.token}` };
+  return { Authorization: `Bearer ${session.token}` };
 }
 
 // ---------- API helpers ----------
 
-export async function getMode() {
-  const builtConfig = supabaseConfig();
-
+// Fetches SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY from the backend, as a
+// fallback for when VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY were
+// not baked in at build time.
+export async function loadRuntimeConfig() {
   const r = await fetch("/api/health").catch(() => null);
-  backendAvailable = Boolean(r?.ok);
   if (!r?.ok) {
     runtimeConfig = {};
-    return builtConfig.url && builtConfig.key ? "supabase" : "demo";
+    return;
   }
   const health = await r.json();
   runtimeConfig = {
     supabaseUrl: (health.supabaseUrl || "").replace(/\/$/, ""),
     supabasePublishableKey: health.supabasePublishableKey || "",
   };
-  return health.mode;
 }
 
-async function fetchApiProfile(headers) {
+async function fetchProfile(headers) {
   const r = await fetch("/api/me", { headers });
   const body = await r.json().catch(() => ({}));
   if (!r.ok)
@@ -105,111 +100,45 @@ async function fetchApiProfile(headers) {
   return body;
 }
 
-async function fetchSupabaseRows(path, token) {
-  const { url, key } = supabaseConfig();
-  const r = await fetch(`${url}/rest/v1/${path}`, {
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  const body = await r.json().catch(() => []);
-  if (!r.ok) throw Error(body.message || "We could not load your SupplyX profile.");
-  return Array.isArray(body) ? body : [];
-}
-
-async function fetchSupabaseProfile(token, authUserId) {
-  const profiles = await fetchSupabaseRows(
-    `profiles?id=eq.${authUserId}&select=id,full_name,role`,
-    token,
-  );
-  const profile = profiles[0];
-  if (!profile)
-    throw Error("Your account needs a SupplyX business profile. Please sign up first.");
-
-  const [shops, suppliers] = await Promise.all([
-    fetchSupabaseRows(
-      `spaza_shops?owner_id=eq.${authUserId}&select=shop_name,location`,
-      token,
-    ).catch(() => []),
-    fetchSupabaseRows(
-      `suppliers?owner_id=eq.${authUserId}&select=business_name,location`,
-      token,
-    ).catch(() => []),
-  ]);
-
-  const shop = shops[0];
-  const supplier = suppliers[0];
-  return {
-    id: profile.id,
-    name:
-      shop?.shop_name || supplier?.business_name || profile.full_name || "SupplyX user",
-    role: profile.role,
-    area: shop?.location || supplier?.location || "",
-  };
-}
-
-async function fetchProfile(headers, token, authUserId) {
-  if (backendAvailable) return fetchApiProfile(headers);
-  return fetchSupabaseProfile(token, authUserId);
-}
-
 // ---------- sign in ----------
 
-export async function signIn({ email, password, mode }) {
+export async function signIn({ email, password }) {
   email = email.trim().toLowerCase();
   if (!email || !password) throw Error("Enter your email and password.");
 
-  let session;
-
-  if (mode === "demo") {
+  const { url, key } = supabaseConfig();
+  if (!url || !key)
     throw Error(
-      "Sign in is connected to Supabase. Please use a Supabase account.",
+      "Sign in is not set up yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to your .env file.",
     );
-  } else {
-    const { url, key } = supabaseConfig();
-    if (!url || !key)
-      throw Error(
-        "Sign in is not set up yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to your .env file.",
-      );
-    const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: { apikey: key, "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const message = body.msg || body.error_description || body.error || "";
-      const lower = message.toLowerCase();
-      if (lower.includes("email not confirmed"))
-        throw Error("Please confirm your email in Supabase before signing in.");
-      if (lower.includes("invalid login credentials"))
-        throw Error("Incorrect email or password.");
-      throw Error(message || "Sign in failed. Try again.");
-    }
-    const token = body.access_token;
-    const authUserId = body.user?.id;
-    const user = await fetchProfile(
-      { Authorization: `Bearer ${token}` },
-      token,
-      authUserId,
-    );
-    session = {
-      mode,
-      token,
-      expiresAt: Date.now() + (body.expires_in || 3600) * 1000,
-      user,
-      staticDemo: !backendAvailable,
-    };
+  const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: key, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const message = body.msg || body.error_description || body.error || "";
+    const lower = message.toLowerCase();
+    if (lower.includes("email not confirmed"))
+      throw Error("Please confirm your email in Supabase before signing in.");
+    if (lower.includes("invalid login credentials"))
+      throw Error("Incorrect email or password.");
+    throw Error(message || "Sign in failed. Try again.");
   }
+  const token = body.access_token;
+  const user = await fetchProfile({ Authorization: `Bearer ${token}` });
+  const session = {
+    token,
+    expiresAt: Date.now() + (body.expires_in || 3600) * 1000,
+    user,
+  };
 
   return session;
 }
 
-export async function requestPasswordReset(email, mode) {
+export async function requestPasswordReset(email) {
   email = email.trim().toLowerCase();
-  if (mode === "demo")
-    throw Error("Password reset is only available for Supabase accounts.");
   if (!email)
     throw Error("Type your email above first, then click Forgot password.");
   const { url, key } = supabaseConfig();
@@ -310,14 +239,8 @@ export async function uploadVerificationDoc(file, kind) {
   return path;
 }
 
-export async function signUp(f, mode) {
+export async function signUp(f) {
   const email = f.email.trim().toLowerCase();
-
-  // Demo mode: the local backend has no sign up endpoint, so nothing is saved.
-  if (mode === "demo") {
-    await new Promise((r) => setTimeout(r, 600));
-    return { demo: true, email };
-  }
 
   const { url, key } = supabaseConfig();
   if (!url || !key)
@@ -357,5 +280,5 @@ export async function signUp(f, mode) {
       throw Error("Too many attempts. Wait a few minutes and try again.");
     throw Error(body.msg || "We could not create your account. Try again.");
   }
-  return { demo: false, email };
+  return { email };
 }

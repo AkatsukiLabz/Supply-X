@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   AREAS,
   SIGNUP_ROLES,
-  getMode,
+  loadRuntimeConfig,
   signUp,
   uploadVerificationDoc,
   validateSignup,
@@ -24,7 +24,7 @@ const EMPTY = {
 };
 
 export default function Signup({ onShowLogin }) {
-  const [mode, setMode] = useState("");
+  const [ready, setReady] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
@@ -38,8 +38,8 @@ export default function Signup({ onShowLogin }) {
   });
 
   useEffect(() => {
-    getMode()
-      .then(setMode)
+    loadRuntimeConfig()
+      .then(() => setReady(true))
       .catch((e) => setError(e.message));
   }, []);
 
@@ -67,7 +67,7 @@ export default function Signup({ onShowLogin }) {
     try {
       let bankConfirmationPath = "";
       let tradingProofPath = "";
-      if (form.role === "supplier" && mode !== "demo") {
+      if (form.role === "supplier") {
         setUploadStep("Uploading bank confirmation…");
         bankConfirmationPath = await uploadVerificationDoc(
           form.bankConfirmationFile,
@@ -81,10 +81,7 @@ export default function Signup({ onShowLogin }) {
       }
       setUploadStep("Creating your account…");
       setDone(
-        await signUp(
-          { ...form, bankConfirmationPath, tradingProofPath },
-          mode,
-        ),
+        await signUp({ ...form, bankConfirmationPath, tradingProofPath }),
       );
     } catch (err) {
       setError(err.message);
@@ -138,20 +135,12 @@ export default function Signup({ onShowLogin }) {
             <div className="done-icon">✓</div>
             <div className="eyebrow">APPLICATION RECEIVED</div>
             <h1>Thanks, {form.contactName.trim().split(" ")[0]}!</h1>
-            {done.demo ? (
-              <div className="message">
-                This is the local demo, so no account was saved. Real sign up
-                works once the team connects Supabase. For now, sign in with a
-                demo account.
-              </div>
-            ) : (
-              <p>
-                We sent a confirmation link to <strong>{done.email}</strong>.
-                Click it to confirm your email. The SupplyX team will then check
-                your details and activate your {isShop ? "shop" : "supplier"}{" "}
-                account.
-              </p>
-            )}
+            <p>
+              We sent a confirmation link to <strong>{done.email}</strong>.
+              Click it to confirm your email. The SupplyX team will then check
+              your details and activate your {isShop ? "shop" : "supplier"}{" "}
+              account.
+            </p>
             <button className="login-submit" onClick={onShowLogin}>
               Back to sign in
             </button>
@@ -347,7 +336,7 @@ export default function Signup({ onShowLogin }) {
               </div>
             )}
 
-            <button className="login-submit" disabled={busy || !mode}>
+            <button className="login-submit" disabled={busy || !ready}>
               {busy ? uploadStep || "Creating account…" : "Create account"}
             </button>
 

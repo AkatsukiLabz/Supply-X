@@ -10,8 +10,7 @@ export function createApp(db, config = {}) {
     s = service(db, config.clock, {
       supabaseUrl: config.supabaseUrl,
       supabaseServiceRoleKey: config.supabaseServiceRoleKey,
-    }),
-    mode = config.mode || "demo";
+    });
   app.disable("x-powered-by");
   app.use(
     helmet({
@@ -38,23 +37,25 @@ export function createApp(db, config = {}) {
     await db.query("SELECT 1");
     res.json({
       status: "ok",
-      mode,
       supabaseUrl: config.supabaseUrl || null,
       supabasePublishableKey: config.supabasePublishableKey || null,
     });
   });
-  if (mode === "demo")
-    app.get("/api/demo-users", async (req, res) =>
-      res.json(
-        (
-          await db.query(
-            "SELECT id,name,role,area FROM supplyx.users ORDER BY role,name",
-          )
-        ).rows,
-      ),
-    );
-  app.use("/api", authentication(db, { ...config, mode }));
+  app.use("/api", authentication(db, config));
   app.get("/api/me", (req, res) => res.json(req.user));
+  app.get("/api/me/documents/status", async (req, res) =>
+    res.json(await s.ownDocumentsStatus(req.user)),
+  );
+  app.post("/api/me/documents", async (req, res) => {
+    const input = z
+      .object({
+        bankConfirmationPath: z.string().min(1).max(500).optional(),
+        tradingProofPath: z.string().min(1).max(500).optional(),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(await s.updateOwnDocuments(req.user, input));
+  });
   app.get("/api/products", async (req, res) =>
     res.json(
       (
@@ -136,6 +137,16 @@ export function createApp(db, config = {}) {
   app.get("/api/admin/suppliers", async (req, res) =>
     res.json(await s.adminSuppliers(req.user)),
   );
+  app.get("/api/admin/suppliers/:id/documents/:field", async (req, res) => {
+    const { buffer, contentType } = await s.supplierDocument(
+      req.user,
+      uuid.parse(req.params.id),
+      req.params.field,
+    );
+    res.set("Content-Type", contentType);
+    res.set("Content-Disposition", "inline");
+    res.send(buffer);
+  });
   app.post("/api/admin/suppliers/:id/verify", async (req, res) => {
     const input = z
       .object({
