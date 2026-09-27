@@ -55,6 +55,7 @@ export const DEMO_ACCOUNTS = [
 
 const KEY = "supplyx.session";
 let runtimeConfig = {};
+let backendAvailable = false;
 const viteSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(
   /\/$/,
   "",
@@ -121,6 +122,7 @@ export async function getMode() {
   const builtConfig = supabaseConfig();
 
   const r = await fetch("/api/health").catch(() => null);
+  backendAvailable = Boolean(r?.ok);
   if (!r?.ok) {
     runtimeConfig = {};
     return builtConfig.url && builtConfig.key ? "supabase" : "demo";
@@ -133,12 +135,61 @@ export async function getMode() {
   return health.mode;
 }
 
-async function fetchProfile(headers) {
+async function fetchApiProfile(headers) {
   const r = await fetch("/api/me", { headers });
   const body = await r.json().catch(() => ({}));
   if (!r.ok)
     throw Error(body.error || "We could not load your SupplyX profile.");
   return body;
+}
+
+async function fetchSupabaseRows(path, token) {
+  const { url, key } = supabaseConfig();
+  const r = await fetch(`${url}/rest/v1/${path}`, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const body = await r.json().catch(() => []);
+  if (!r.ok) throw Error(body.message || "We could not load your SupplyX profile.");
+  return Array.isArray(body) ? body : [];
+}
+
+async function fetchSupabaseProfile(token, authUserId) {
+  const profiles = await fetchSupabaseRows(
+    `profiles?id=eq.${authUserId}&select=id,full_name,role`,
+    token,
+  );
+  const profile = profiles[0];
+  if (!profile)
+    throw Error("Your account needs a SupplyX business profile. Please sign up first.");
+
+  const [shops, suppliers] = await Promise.all([
+    fetchSupabaseRows(
+      `spaza_shops?owner_id=eq.${authUserId}&select=shop_name,location`,
+      token,
+    ).catch(() => []),
+    fetchSupabaseRows(
+      `suppliers?owner_id=eq.${authUserId}&select=business_name,location`,
+      token,
+    ).catch(() => []),
+  ]);
+
+  const shop = shops[0];
+  const supplier = suppliers[0];
+  return {
+    id: profile.id,
+    name:
+      shop?.shop_name || supplier?.business_name || profile.full_name || "SupplyX user",
+    role: profile.role,
+    area: shop?.location || supplier?.location || "",
+  };
+}
+
+async function fetchProfile(headers, token, authUserId) {
+  if (backendAvailable) return fetchApiProfile(headers);
+  return fetchSupabaseProfile(token, authUserId);
 }
 
 // ---------- sign in ----------
@@ -153,13 +204,13 @@ export async function signIn({ email, password, mode }) {
     const account = DEMO_ACCOUNTS.find((a) => a.email === email);
     if (!account || password !== DEMO_PASSWORD)
       throw Error("Incorrect email or password.");
-    const user = await fetchProfile({ "x-demo-user": account.id }).catch(
-      () => ({
-        ...account,
-        area: "Centurion",
-      }),
-    );
-    session = { mode, user, staticDemo: true };
+    const user = backendAvailable
+      ? await fetchApiProfile({ "x-demo-user": account.id })
+      : {
+          ...account,
+          area: "Centurion",
+        };
+    session = { mode, user, staticDemo: !backendAvailable };
   } else {
     const { url, key } = supabaseConfig();
     if (!url || !key)
@@ -182,12 +233,18 @@ export async function signIn({ email, password, mode }) {
       throw Error(message || "Sign in failed. Try again.");
     }
     const token = body.access_token;
-    const user = await fetchProfile({ Authorization: `Bearer ${token}` });
+    const authUserId = body.user?.id;
+    const user = await fetchProfile(
+      { Authorization: `Bearer ${token}` },
+      token,
+      authUserId,
+    );
     session = {
       mode,
       token,
       expiresAt: Date.now() + (body.expires_in || 3600) * 1000,
       user,
+      staticDemo: !backendAvailable,
     };
   }
 
