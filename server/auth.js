@@ -85,6 +85,23 @@ const createPublicProfile = async (db, profile) =>
     return publicProfile(tx, profile.id);
   });
 
+// A page load normally fires several API calls at once (products, requests,
+// auctions, orders...), and every one of them was separately asking the
+// database "who is this person" before doing its own real work. That is a
+// full extra round trip to the database, repeated needlessly for the same
+// person within the same few seconds. This cache remembers the answer for a
+// short time so only the first of those calls actually has to ask.
+const PROFILE_CACHE_MS = 30_000;
+const profileCache = new Map();
+
+async function cachedProfile(db, id) {
+  const hit = profileCache.get(id);
+  if (hit && hit.expiresAt > Date.now()) return hit.user;
+  const user = await publicProfile(db, id);
+  if (user) profileCache.set(id, { user, expiresAt: Date.now() + PROFILE_CACHE_MS });
+  return user;
+}
+
 export function authentication(db, { supabaseUrl } = {}) {
   if (!supabaseUrl?.startsWith("https://"))
     throw Error("SUPABASE_URL is required");
@@ -106,10 +123,14 @@ export function authentication(db, { supabaseUrl } = {}) {
     }
     if (!id || !/^[0-9a-f-]{36}$/i.test(id))
       return res.status(401).json({ error: "Sign in to continue" });
-    let user = await publicProfile(db, id);
+    let user = await cachedProfile(db, id);
     if (!user) {
       const profile = signupProfile(payload);
-      if (profile) user = await createPublicProfile(db, profile);
+      if (profile) {
+        user = await createPublicProfile(db, profile);
+        if (user)
+          profileCache.set(id, { user, expiresAt: Date.now() + PROFILE_CACHE_MS });
+      }
     }
     if (!user)
       return res

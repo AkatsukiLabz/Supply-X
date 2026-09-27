@@ -111,7 +111,8 @@ export function service(
           p.product_name AS name,
           p.unit AS pack,
           s.id AS shop_id,
-          s.shop_name
+          s.shop_name,
+          gm.group_id
          FROM public.requests r
          JOIN public.products p ON p.id = r.product_id
          JOIN public.group_members gm ON gm.id = r.group_member_id
@@ -193,26 +194,35 @@ export function service(
         [u.role, u.id, u.area],
       );
       const rows = result.rows;
-      for (const a of rows) {
-        a.bids = (
+      // One query for every auction's bids together, instead of one extra
+      // trip to the database per auction. With many auctions on screen this
+      // is what made the page after sign in feel slow to load.
+      if (rows.length) {
+        const bidRows = (
           await db.query(
-            `SELECT
-              b.id,
-              ROUND((b.unit_price * $2) * 100)::integer AS total_cents,
-              b.created_at
+            `SELECT b.id, b.auction_id, b.unit_price, b.created_at, s.owner_id
              FROM public.bids b
              JOIN public.suppliers s ON s.id = b.supplier_id
-             WHERE b.auction_id=$1 AND (s.owner_id=$3 OR ($4='admin' AND $5::boolean))
+             WHERE b.auction_id = ANY($1)
              ORDER BY b.unit_price, b.created_at, b.id`,
-            [
-              a.id,
-              Number(a.quantity),
-              u.id,
-              u.role,
-              clock() >= new Date(a.closes_at),
-            ],
+            [rows.map((a) => a.id)],
           )
         ).rows;
+        const now = clock();
+        for (const a of rows) {
+          const closed = now >= new Date(a.closes_at);
+          a.bids = bidRows
+            .filter(
+              (b) =>
+                b.auction_id === a.id &&
+                (b.owner_id === u.id || (u.role === "admin" && closed)),
+            )
+            .map((b) => ({
+              id: b.id,
+              total_cents: Math.round(Number(b.unit_price) * Number(a.quantity) * 100),
+              created_at: b.created_at,
+            }));
+        }
       }
       return rows;
     },
@@ -455,10 +465,14 @@ export function service(
         [u.role, u.id],
       );
       const orders = result.rows;
-      for (const order of orders) {
-        order.allocations = (
+      // One query for every order's allocations together, instead of one
+      // extra trip to the database per order. With many orders on screen
+      // this is what made the page after sign in feel slow to load.
+      if (orders.length) {
+        const allocRows = (
           await db.query(
             `SELECT
+              a.bulk_order_id,
               a.request_id,
               a.quantity,
               ss.shop_name,
@@ -469,17 +483,19 @@ export function service(
              JOIN public.requests r ON r.id = a.request_id
              JOIN public.group_members gm ON gm.id = r.group_member_id
              JOIN public.spaza_shops ss ON ss.id = gm.shop_id
-             WHERE a.bulk_order_id=$1
-               AND ($2='admin' OR ss.owner_id=$3 OR EXISTS (
-                 SELECT 1
-                 FROM public.bulk_orders bo
-                 JOIN public.suppliers su ON su.id = bo.supplier_id
-                 WHERE bo.id=a.bulk_order_id AND su.owner_id=$3
-               ))
+             JOIN public.bulk_orders bo ON bo.id = a.bulk_order_id
+             LEFT JOIN public.suppliers su ON su.id = bo.supplier_id
+             WHERE a.bulk_order_id = ANY($1)
+               AND ($2='admin' OR ss.owner_id=$3 OR su.owner_id=$3)
              ORDER BY ss.shop_name`,
-            [order.id, u.role, u.id],
+            [orders.map((o) => o.id), u.role, u.id],
           )
         ).rows;
+        for (const order of orders) {
+          order.allocations = allocRows
+            .filter((a) => a.bulk_order_id === order.id)
+            .map(({ bulk_order_id, ...rest }) => rest);
+        }
       }
       return orders;
     },

@@ -131,6 +131,12 @@ export default function App({ session, onSignOut }) {
     }
   }
 
+  function goToTab(nextTab) {
+    setNotice("");
+    setError("");
+    setTab(nextTab);
+  }
+
   const tabs = tabsForRole(user?.role);
   const activeTab = tabs.includes(tab) ? tab : tabs[0];
   const availableSupplierAuctions = data.auctions.filter(
@@ -164,9 +170,9 @@ export default function App({ session, onSignOut }) {
       />
     );
   } else if (activeTab === "Overview" && user?.role === "admin") {
-    page = <AdminOverview data={data} setTab={setTab} busy={busy} api={api} act={act} />;
+    page = <AdminOverview data={data} setTab={goToTab} busy={busy} api={api} act={act} />;
   } else if (activeTab === "Overview" && isShop(user?.role)) {
-    page = <ShopOverview user={user} onGoTo={setTab} />;
+    page = <ShopOverview user={user} data={data} onGoTo={goToTab} />;
   } else if (activeTab === "Buying groups" && user?.role === "admin") {
     page = <BuyingGroupsPage groups={data.groups} busy={busy} act={act} />;
   } else if (activeTab === "Stock requests") {
@@ -198,7 +204,7 @@ export default function App({ session, onSignOut }) {
     page = (
       <OrdersPage
         user={user}
-        orders={data.orders}
+        data={data}
         busy={busy}
         act={act}
         api={api}
@@ -211,7 +217,7 @@ export default function App({ session, onSignOut }) {
       user={user}
       tabs={tabs}
       activeTab={activeTab}
-      setTab={setTab}
+      setTab={goToTab}
       error={error}
       notice={notice}
       onSignOut={onSignOut}

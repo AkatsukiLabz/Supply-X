@@ -18,8 +18,16 @@ export function groupRequests(requests = []) {
     // Only requests that are ready and not yet on an auction.
     if (r.status !== "submitted") continue;
     const area = r.area || "";
-    // Same key as the Buying groups tab, so both tabs show the same group ID.
-    const key = `open:${r.product_id}:${area.toLowerCase()}`;
+    // Two requests only belong on the same auction when they share the
+    // same real buying group behind the scenes, not just the same product
+    // and area name. An area's buying group closes once it completes an
+    // order and a fresh one opens for anything requested after that, so
+    // two requests that look alike here can still be in different groups.
+    // Grouping by r.group_id, the same field the server checks before
+    // opening an auction, keeps what you see here always auctionable.
+    const key = r.group_id
+      ? `group:${r.group_id}:${r.product_id}`
+      : `open:${r.product_id}:${area.toLowerCase()}`;
     if (!groups.has(key))
       groups.set(key, {
         key,
