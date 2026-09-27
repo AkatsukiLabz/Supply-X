@@ -113,6 +113,72 @@ async function fetchProfile(headers) {
   return body;
 }
 
+async function supabaseGet(path, token) {
+  const { url, key } = supabaseConfig();
+  const r = await fetch(`${url}/rest/v1/${path}`, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${token}`,
+    },
+  }).catch(() => null);
+  if (!r) throw Error("We could not reach Supabase to load your profile.");
+  const body = await r.json().catch(() => null);
+  if (!r.ok) {
+    throw Error(
+      body?.message || "We could not load your SupplyX profile from Supabase.",
+    );
+  }
+  return Array.isArray(body) ? body : [];
+}
+
+async function fetchSupabaseProfile(token, authUser) {
+  const profileRows = await supabaseGet(
+    `profiles?select=id,full_name,role&id=eq.${encodeURIComponent(authUser.id)}&limit=1`,
+    token,
+  );
+  const profile = profileRows[0];
+  if (!profile) {
+    throw Error(
+      "Your account needs a SupplyX business profile. Please sign up first.",
+    );
+  }
+
+  if (profile.role === "spaza_owner") {
+    const shops = await supabaseGet(
+      `spaza_shops?select=shop_name,location&owner_id=eq.${encodeURIComponent(authUser.id)}&order=created_at.asc&limit=1`,
+      token,
+    );
+    const shop = shops[0];
+    return {
+      id: profile.id,
+      name: shop?.shop_name || profile.full_name || authUser.email,
+      role: profile.role,
+      area: shop?.location || "",
+    };
+  }
+
+  if (profile.role === "supplier") {
+    const suppliers = await supabaseGet(
+      `suppliers?select=business_name,location&owner_id=eq.${encodeURIComponent(authUser.id)}&order=created_at.asc&limit=1`,
+      token,
+    );
+    const supplier = suppliers[0];
+    return {
+      id: profile.id,
+      name: supplier?.business_name || profile.full_name || authUser.email,
+      role: profile.role,
+      area: supplier?.location || "",
+    };
+  }
+
+  return {
+    id: profile.id,
+    name: profile.full_name || authUser.email,
+    role: profile.role,
+    area: "",
+  };
+}
+
 // ---------- sign in ----------
 
 export async function signIn({ email, password }) {
@@ -140,7 +206,9 @@ export async function signIn({ email, password }) {
     throw Error(message || "Sign in failed. Try again.");
   }
   const token = body.access_token;
-  const user = await fetchProfile({ Authorization: `Bearer ${token}` });
+  const user = API_BASE
+    ? await fetchProfile({ Authorization: `Bearer ${token}` })
+    : await fetchSupabaseProfile(token, body.user);
   const session = {
     token,
     expiresAt: Date.now() + (body.expires_in || 3600) * 1000,
