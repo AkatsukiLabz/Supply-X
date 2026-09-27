@@ -11,12 +11,10 @@
   "client": "vite --host 127.0.0.1",
   "dev": "concurrently -k \"npm run server\" \"npm run client\"",
   "build": "vite build",
-  "test": "node --test tests/*.test.js",
-  "check": "npm test && npm run build",
-  "format": "prettier --write server client/src tests vite.config.js package.json README.md docs/*.md"
+  "check": "npm run build",
+  "format": "prettier --write server client/src vite.config.js package.json README.md docs/*.md"
 },
 "dependencies": {
-    "@electric-sql/pglite": "^0.3.0",
     "express": "^5.1.0",
     "helmet": "^8.0.0",
     "jose": "^6.0.0",

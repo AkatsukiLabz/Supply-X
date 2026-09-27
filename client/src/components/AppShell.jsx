@@ -4,7 +4,6 @@ import { pageCopy, tabIcon } from "../utils/navigation.js";
 
 export default function AppShell({
   user,
-  mode,
   tabs,
   activeTab,
   setTab,
@@ -60,9 +59,7 @@ export default function AppShell({
           <span>
             WORKSPACE <b>/ {activeTab}</b>
           </span>
-          <span className="local">
-            ● {mode === "demo" ? "LOCAL DEMO" : "CONNECTED API"}
-          </span>
+          <span className="local">● CONNECTED</span>
         </header>
 
         <div className="content">
@@ -102,8 +99,8 @@ export default function AppShell({
 
           <div className="bottom-note">
             {user?.role === "supplier"
-              ? "LOCAL PROTOTYPE · No real payments · Area matching uses exact names"
-              : "LOCAL PROTOTYPE · Demo wallet · No real money movement · Area matching uses an exact service-area name"}
+              ? "Area matching uses exact service-area names"
+              : "Area matching uses an exact service-area name"}
           </div>
         </div>
       </main>

@@ -29,7 +29,7 @@ export default function AuctionsPage({
       <p>
         {user?.role === "supplier"
           ? "Submit one private delivered total per open auction. Once you bid, it moves to My bids."
-          : "Each supplier bid is the full delivered total in rand. No real payments are collected in this demo."}
+          : "Each supplier bid is the full delivered total in rand."}
       </p>
 
       <AuctionCards

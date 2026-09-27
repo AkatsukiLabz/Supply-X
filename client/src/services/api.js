@@ -1,10 +1,7 @@
 import { authHeaders } from "../auth.js";
-import { staticDemoApi } from "./staticDemo.js";
 
 export function createApiClient(session, onUnauthorized) {
-  return async function api(path, body) {
-    if (session?.staticDemo) return staticDemoApi(path, body, session);
-
+  async function api(path, body) {
     const response = await fetch("/api" + path, {
       method: body === undefined ? "GET" : "POST",
       headers: {
@@ -28,5 +25,27 @@ export function createApiClient(session, onUnauthorized) {
     }
 
     return result;
+  }
+
+  // For a non-JSON response (a file). Carries the same auth header as api()
+  // and surfaces the server's real error message instead of a generic one.
+  api.download = async function download(path) {
+    const response = await fetch("/api" + path, {
+      headers: authHeaders(session),
+    });
+
+    if (response.status === 401) {
+      onUnauthorized?.();
+      throw Error("Your session has ended. Please sign in again.");
+    }
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw Error(result.error || "Could not open this document.");
+    }
+
+    return response.blob();
   };
+
+  return api;
 }

@@ -4,8 +4,18 @@ import { auctionState } from "../utils/navigation.js";
 const CHECKLIST = [
   { key: "contact", label: "Contact details" },
   { key: "area", label: "Service area" },
-  { key: "bank", label: "Bank confirmation", docKey: "bank_confirmation_url" },
-  { key: "trading", label: "Trading proof", docKey: "trading_proof_url" },
+  {
+    key: "bank",
+    label: "Bank confirmation",
+    isDoc: true,
+    uploadedKey: "bank_confirmation_uploaded",
+  },
+  {
+    key: "trading",
+    label: "Trading proof",
+    isDoc: true,
+    uploadedKey: "trading_proof_uploaded",
+  },
 ];
 
 export default function AdminOverview({ data, setTab, busy, api }) {
@@ -21,6 +31,7 @@ export default function AdminOverview({ data, setTab, busy, api }) {
   const [suppliers, setSuppliers] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [savingKey, setSavingKey] = useState("");
+  const [openingKey, setOpeningKey] = useState("");
 
   async function loadSuppliers() {
     try {
@@ -45,6 +56,24 @@ export default function AdminOverview({ data, setTab, busy, api }) {
       setLoadError(err.message);
     } finally {
       setSavingKey("");
+    }
+  }
+
+  async function openDocument(supplier, field) {
+    const key = `${supplier.id}-${field}`;
+    setOpeningKey(key);
+    setLoadError("");
+    try {
+      const blob = await api.download(
+        `/admin/suppliers/${supplier.id}/documents/${field}`,
+      );
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setOpeningKey("");
     }
   }
 
@@ -133,16 +162,12 @@ export default function AdminOverview({ data, setTab, busy, api }) {
 
           return (
             <article key={supplier.id} className={complete ? "supplier-verified" : ""}>
-              <div className="card-top">
+              <div className="supplier-card-top">
+                <h2>{supplier.business_name}</h2>
                 <span className="pill">
-                  {complete ? "Verified" : `${verifiedCount}/4`}
+                  {complete ? "Verified" : `${verifiedCount}/4 checked`}
                 </span>
-                <span>{supplier.location || "No area"}</span>
               </div>
-              <h2>{supplier.business_name}</h2>
-              <p className="muted">
-                {supplier.contact_phone || "No phone on file"}
-              </p>
 
               <div className="checklist-items">
                 {CHECKLIST.map((item) => {
@@ -153,35 +178,51 @@ export default function AdminOverview({ data, setTab, busy, api }) {
                         ? "trading_proof_verified"
                         : `${item.key}_verified`;
                   const checked = Boolean(supplier[columnKey]);
-                  const saving = savingKey === `${supplier.id}-${item.key}`;
-                  const docUrl = item.docKey ? supplier[item.docKey] : null;
+                  const itemKey = `${supplier.id}-${item.key}`;
+                  const saving = savingKey === itemKey;
+                  const opening = openingKey === itemKey;
+                  const uploaded = item.uploadedKey
+                    ? Boolean(supplier[item.uploadedKey])
+                    : null;
+                  const value =
+                    item.key === "contact"
+                      ? supplier.contact_phone || "No phone on file"
+                      : item.key === "area"
+                        ? supplier.location || "No area on file"
+                        : null;
 
                   return (
-                    <label key={item.key} className="checklist-item">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={busy || saving}
-                        onChange={(e) =>
-                          toggleVerified(supplier, item.key, e.target.checked)
-                        }
-                      />
-                      <span>
-                        {item.label}
-                        {item.docKey && (
-                          docUrl ? (
-                            <>
-                              {" "}
-                              <a href={docUrl} target="_blank" rel="noreferrer">
-                                View document
-                              </a>
-                            </>
+                    <div key={item.key} className="checklist-item">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={busy || saving}
+                          onChange={(e) =>
+                            toggleVerified(supplier, item.key, e.target.checked)
+                          }
+                        />
+                        <span className="checklist-label">{item.label}</span>
+                      </label>
+                      <span className="checklist-value">
+                        {value}
+                        {item.isDoc &&
+                          (!uploaded ? (
+                            <span className="doc-status doc-missing">
+                              Not uploaded
+                            </span>
                           ) : (
-                            <span className="muted"> — not uploaded</span>
-                          )
-                        )}
+                            <button
+                              type="button"
+                              className="doc-status doc-link"
+                              disabled={opening}
+                              onClick={() => openDocument(supplier, item.key)}
+                            >
+                              {opening ? "Opening…" : "View document"}
+                            </button>
+                          ))}
                       </span>
-                    </label>
+                    </div>
                   );
                 })}
               </div>
