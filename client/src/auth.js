@@ -1,11 +1,8 @@
 // SupplyX sign in helpers (frontend only).
 //
-// Works with BOTH backend modes that already exist:
-//   demo mode      -> checks the demo email and password below, then sends
-//                     the "x-demo-user" header the backend already expects.
-//   supabase mode  -> signs in with Supabase email and password, then sends
-//                     "Authorization: Bearer <token>" to the backend.
-// No backend changes are needed.
+// Sign in uses Supabase Auth when Supabase configuration is available.
+// Local demo mode no longer accepts hardcoded frontend credentials; it is only
+// kept as a backend development mode when the Express API is running locally.
 
 export const ROLES = [
   { value: "spaza_owner",
@@ -17,41 +14,6 @@ export const ROLES = [
 
 export const roleLabel = (role) =>
   ROLES.find((r) => r.value === role)?.label || role;
-
-// Demo logins. The IDs match the accounts the backend seeds in server/db.js.
-export const DEMO_PASSWORD = "SupplyX2026";
-export const DEMO_ACCOUNTS = [
-  {
-    email: "mosh@supplyx.demo",
-    name: "Mosh’s Mini Market",
-    role: "spaza_owner",
-    id: "10000000-0000-4000-8000-000000000001",
-  },
-  {
-    email: "corner@supplyx.demo",
-    name: "Corner Basket",
-    role: "spaza_owner",
-    id: "10000000-0000-4000-8000-000000000002",
-  },
-  {
-    email: "ubuntu@supplyx.demo",
-    name: "Ubuntu Wholesale",
-    role: "supplier",
-    id: "10000000-0000-4000-8000-000000000003",
-  },
-  {
-    email: "community@supplyx.demo",
-    name: "Community Cash & Carry",
-    role: "supplier",
-    id: "10000000-0000-4000-8000-000000000004",
-  },
-  {
-    email: "admin@supplyx.demo",
-    name: "SupplyX coordinator",
-    role: "admin",
-    id: "10000000-0000-4000-8000-000000000005",
-  },
-];
 
 const KEY = "supplyx.session";
 let runtimeConfig = {};
@@ -201,16 +163,9 @@ export async function signIn({ email, password, mode }) {
   let session;
 
   if (mode === "demo") {
-    const account = DEMO_ACCOUNTS.find((a) => a.email === email);
-    if (!account || password !== DEMO_PASSWORD)
-      throw Error("Incorrect email or password.");
-    const user = backendAvailable
-      ? await fetchApiProfile({ "x-demo-user": account.id })
-      : {
-          ...account,
-          area: "Centurion",
-        };
-    session = { mode, user, staticDemo: !backendAvailable };
+    throw Error(
+      "Sign in is connected to Supabase. Please use a Supabase account.",
+    );
   } else {
     const { url, key } = supabaseConfig();
     if (!url || !key)
@@ -254,7 +209,7 @@ export async function signIn({ email, password, mode }) {
 export async function requestPasswordReset(email, mode) {
   email = email.trim().toLowerCase();
   if (mode === "demo")
-    return `Demo accounts all use the password ${DEMO_PASSWORD}.`;
+    throw Error("Password reset is only available for Supabase accounts.");
   if (!email)
     throw Error("Type your email above first, then click Forgot password.");
   const { url, key } = supabaseConfig();

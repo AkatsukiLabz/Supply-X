@@ -1,4 +1,13 @@
-import { DEMO_ACCOUNTS } from "../auth.js";
+const sampleShops = [
+  {
+    id: "10000000-0000-4000-8000-000000000001",
+    name: "Mosh’s Mini Market",
+  },
+  {
+    id: "10000000-0000-4000-8000-000000000002",
+    name: "Corner Basket",
+  },
+];
 
 const products = [
   {
@@ -30,8 +39,8 @@ const products = [
 const initialRequests = [
   {
     id: "static-request-1",
-    shop_id: DEMO_ACCOUNTS[0].id,
-    shop_name: DEMO_ACCOUNTS[0].name,
+    shop_id: sampleShops[0].id,
+    shop_name: sampleShops[0].name,
     product_id: products[0].id,
     name: products[0].name,
     pack: products[0].pack,
@@ -41,8 +50,8 @@ const initialRequests = [
   },
   {
     id: "static-request-2",
-    shop_id: DEMO_ACCOUNTS[1].id,
-    shop_name: DEMO_ACCOUNTS[1].name,
+    shop_id: sampleShops[1].id,
+    shop_name: sampleShops[1].name,
     product_id: products[0].id,
     name: products[0].name,
     pack: products[0].pack,
