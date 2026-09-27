@@ -16,6 +16,15 @@ export const roleLabel = (role) =>
 
 const KEY = "supplyx.session";
 let runtimeConfig = {};
+
+// The backend's own address. Empty means "same website as the frontend",
+// which is only true when both are served by the same Express server (local
+// development, or a single combined deployment). A GitHub Pages deployment
+// only hosts the frontend files, so it needs VITE_API_URL set at build time
+// to the real backend's address, e.g. https://supplyx-api.onrender.com
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+export const apiUrl = (path) => `${API_BASE}/api${path}`;
+
 const viteSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(
   /\/$/,
   "",
@@ -80,7 +89,7 @@ export function authHeaders(session) {
 // fallback for when VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY were
 // not baked in at build time.
 export async function loadRuntimeConfig() {
-  const r = await fetch("/api/health").catch(() => null);
+  const r = await fetch(apiUrl("/health")).catch(() => null);
   if (!r?.ok) {
     runtimeConfig = {};
     return;
@@ -93,7 +102,11 @@ export async function loadRuntimeConfig() {
 }
 
 async function fetchProfile(headers) {
-  const r = await fetch("/api/me", { headers });
+  const r = await fetch(apiUrl("/me"), { headers }).catch(() => null);
+  if (!r)
+    throw Error(
+      "We could not reach the SupplyX server. Check that it is running and reachable.",
+    );
   const body = await r.json().catch(() => ({}));
   if (!r.ok)
     throw Error(body.error || "We could not load your SupplyX profile.");

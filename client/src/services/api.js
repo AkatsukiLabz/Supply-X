@@ -1,8 +1,8 @@
-import { authHeaders } from "../auth.js";
+import { apiUrl, authHeaders } from "../auth.js";
 
 export function createApiClient(session, onUnauthorized) {
   async function api(path, body) {
-    const response = await fetch("/api" + path, {
+    const response = await fetch(apiUrl(path), {
       method: body === undefined ? "GET" : "POST",
       headers: {
         "Content-Type": "application/json",
@@ -30,7 +30,7 @@ export function createApiClient(session, onUnauthorized) {
   // For a non-JSON response (a file). Carries the same auth header as api()
   // and surfaces the server's real error message instead of a generic one.
   api.download = async function download(path) {
-    const response = await fetch("/api" + path, {
+    const response = await fetch(apiUrl(path), {
       headers: authHeaders(session),
     });
 

@@ -22,15 +22,26 @@ export function createApp(db, config = {}) {
     }),
   );
   app.use(express.json({ limit: "16kb" }));
-  // Block cross-site browser writes; production frontend/API should share an origin.
+
+  // The frontend and this API do not have to share an origin (for example,
+  // the frontend deployed to GitHub Pages and this server deployed
+  // separately). config.corsOrigins is a comma-separated allowlist of exact
+  // origins ("https://username.github.io") that may call this API from a
+  // browser; anything else is refused. When it is empty, only same-origin
+  // requests work, which is fine for a combined local/single-host setup.
+  const allowedOrigins = (config.corsOrigins || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
   app.use("/api", (req, res, next) => {
-    if (
-      !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-      req.get("sec-fetch-site") === "cross-site"
-    )
-      return res
-        .status(403)
-        .json({ error: "Cross-site writes are not allowed" });
+    const origin = req.get("origin");
+    if (origin && allowedOrigins.includes(origin)) {
+      res.set("Access-Control-Allow-Origin", origin);
+      res.set("Vary", "Origin");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    }
+    if (req.method === "OPTIONS") return res.status(204).end();
     next();
   });
   app.get("/api/health", async (req, res) => {

@@ -30,6 +30,15 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          # GitHub Pages only serves the frontend files below (the dist
+          # folder). It cannot run the Express server in server/, since
+          # Pages has no server-side compute at all. That server must be
+          # deployed separately (Render, Railway, Fly.io, etc.), and this
+          # variable must point at its real public address so the frontend
+          # knows where to send its API calls, instead of guessing this
+          # same GitHub Pages domain. Set it as a repository variable named
+          # VITE_API_URL under Settings > Secrets and variables > Actions.
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

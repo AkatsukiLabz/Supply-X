@@ -14,6 +14,10 @@ const app = createApp(db, {
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY,
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  // Comma-separated list of frontend origins allowed to call this API from
+  // a browser, e.g. "https://username.github.io". Required whenever the
+  // frontend is not served by this same server.
+  corsOrigins: process.env.CORS_ORIGIN,
 });
 app.use(express.static(fileURLToPath(new URL("../dist", import.meta.url))));
 const port = Number(process.env.PORT || 3001),
