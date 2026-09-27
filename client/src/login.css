@@ -355,3 +355,32 @@ button.link:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- file upload fields (supplier verification docs) ---------- */
+.file-input-wrapper {
+  position: relative;
+  display: block;
+}
+.file-input-wrapper input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.file-input-wrapper .file-name {
+  display: block;
+  padding: 10px;
+  border: 1px solid #d4dcd4;
+  border-radius: 7px;
+  background: #fff;
+  color: #6b7b73;
+  font-size: 13px;
+}
+.file-input-wrapper:hover .file-name {
+  border-color: #90af48;
+}
+.file-input-wrapper input.invalid ~ .file-name {
+  border-color: #c16642;
+}

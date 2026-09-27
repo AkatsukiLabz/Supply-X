@@ -4,6 +4,7 @@ import {
   SIGNUP_ROLES,
   getMode,
   signUp,
+  uploadVerificationDoc,
   validateSignup,
 } from "./auth.js";
 import "./login.css";
@@ -18,6 +19,8 @@ const EMPTY = {
   password: "",
   confirm: "",
   agree: false,
+  bankConfirmationFile: null,
+  tradingProofFile: null,
 };
 
 export default function Signup({ onShowLogin }) {
@@ -28,6 +31,11 @@ export default function Signup({ onShowLogin }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(null);
+  const [uploadStep, setUploadStep] = useState("");
+  const [fileNames, setFileNames] = useState({
+    bankConfirmationFile: "",
+    tradingProofFile: "",
+  });
 
   useEffect(() => {
     getMode()
@@ -42,6 +50,13 @@ export default function Signup({ onShowLogin }) {
     setErrors((x) => ({ ...x, [name]: undefined }));
   };
 
+  const setFile = (name) => (e) => {
+    const file = e.target.files?.[0] || null;
+    setForm((f) => ({ ...f, [name]: file }));
+    setFileNames((n) => ({ ...n, [name]: file?.name || "" }));
+    setErrors((x) => ({ ...x, [name]: undefined }));
+  };
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
@@ -50,11 +65,32 @@ export default function Signup({ onShowLogin }) {
     if (Object.keys(found).length) return;
     setBusy(true);
     try {
-      setDone(await signUp(form, mode));
+      let bankConfirmationPath = "";
+      let tradingProofPath = "";
+      if (form.role === "supplier" && mode !== "demo") {
+        setUploadStep("Uploading bank confirmation…");
+        bankConfirmationPath = await uploadVerificationDoc(
+          form.bankConfirmationFile,
+          "bank-confirmation",
+        );
+        setUploadStep("Uploading trading proof…");
+        tradingProofPath = await uploadVerificationDoc(
+          form.tradingProofFile,
+          "trading-proof",
+        );
+      }
+      setUploadStep("Creating your account…");
+      setDone(
+        await signUp(
+          { ...form, bankConfirmationPath, tradingProofPath },
+          mode,
+        ),
+      );
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
+      setUploadStep("");
     }
   }
 
@@ -218,6 +254,44 @@ export default function Signup({ onShowLogin }) {
               {hint("area")}
             </label>
 
+            {!isShop && (
+              <>
+                <label>
+                  Bank confirmation letter
+                  <span className="file-input-wrapper">
+                    <input
+                      type="file"
+                      className={field("bankConfirmationFile")}
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={setFile("bankConfirmationFile")}
+                      aria-label="Upload bank confirmation letter"
+                    />
+                    <span className="file-name">
+                      {fileNames.bankConfirmationFile || "Choose file (PDF, JPG or PNG, max 5MB)"}
+                    </span>
+                  </span>
+                  {hint("bankConfirmationFile")}
+                </label>
+
+                <label>
+                  Proof of trading
+                  <span className="file-input-wrapper">
+                    <input
+                      type="file"
+                      className={field("tradingProofFile")}
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={setFile("tradingProofFile")}
+                      aria-label="Upload proof of trading"
+                    />
+                    <span className="file-name">
+                      {fileNames.tradingProofFile || "Choose file (PDF, JPG or PNG, max 5MB)"}
+                    </span>
+                  </span>
+                  {hint("tradingProofFile")}
+                </label>
+              </>
+            )}
+
             <div className="field-row">
               <label>
                 Password
@@ -274,7 +348,7 @@ export default function Signup({ onShowLogin }) {
             )}
 
             <button className="login-submit" disabled={busy || !mode}>
-              {busy ? "Creating account…" : "Create account"}
+              {busy ? uploadStep || "Creating account…" : "Create account"}
             </button>
 
             <p className="login-help">

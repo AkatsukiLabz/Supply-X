@@ -1,1 +1,29 @@
 /* Admin/coordinator workspace styles live here. */
+
+.checklist-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: #183b31;
+  cursor: pointer;
+}
+.checklist-item input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: #194f3d;
+  cursor: pointer;
+}
+.checklist-item a {
+  color: #194f3d;
+  font-weight: 600;
+}
+article.supplier-verified {
+  border-color: #90af48;
+  background: #f7faf1;
+}

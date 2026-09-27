@@ -27,18 +27,49 @@ const currentSupplier = (db, userId) =>
  
 async function ensureGroupMember(tx, u) {
   const shop = await currentShop(tx, u.id);
-  const group = (
+  const area = shop.location || u.area || "SupplyX";
+  const groupName = `${area} collective`;
+
+  // Reuse this shop's existing membership in an open group for its area, if any.
+  const existingMember = (
     await tx.query(
-      `INSERT INTO public.purchasing_groups(group_name, created_by, target_amount, status)
-       VALUES($1, $2, 1, 'open')
-       RETURNING *`,
-      [`${shop.location || u.area || "SupplyX"} collective`, u.id],
+      `SELECT gm.*
+       FROM public.group_members gm
+       JOIN public.purchasing_groups g ON g.id = gm.group_id
+       WHERE gm.shop_id=$1 AND gm.status='active' AND g.status='open' AND g.group_name=$2
+       LIMIT 1`,
+      [shop.id, groupName],
     )
   ).rows[0];
+  if (existingMember) return existingMember;
+
+  // Reuse an open group other shops in the same area already joined, so demand pools together.
+  let group = (
+    await tx.query(
+      `SELECT * FROM public.purchasing_groups
+       WHERE status='open' AND group_name=$1
+       LIMIT 1
+       FOR UPDATE`,
+      [groupName],
+    )
+  ).rows[0];
+
+  if (!group) {
+    group = (
+      await tx.query(
+        `INSERT INTO public.purchasing_groups(group_name, created_by, target_amount, status)
+         VALUES($1, $2, 1, 'open')
+         RETURNING *`,
+        [groupName, u.id],
+      )
+    ).rows[0];
+  }
+
   return (
     await tx.query(
       `INSERT INTO public.group_members(group_id, shop_id, status)
        VALUES($1, $2, 'active')
+       ON CONFLICT (group_id, shop_id) DO UPDATE SET status='active'
        RETURNING *`,
       [group.id, shop.id],
     )
@@ -52,7 +83,39 @@ const statusForApp = (status) =>
       ? "received"
       : status;
  
-export function service(db, clock = () => new Date()) {
+const VERIFY_FIELDS = {
+  contact: "contact_verified",
+  area: "area_verified",
+  bank: "bank_confirmation_verified",
+  trading: "trading_proof_verified",
+};
+
+async function signedDocUrl(supabaseUrl, serviceRoleKey, path) {
+  if (!path || !supabaseUrl || !serviceRoleKey) return null;
+  const response = await fetch(
+    `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/sign/supplier-documents/${path}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    },
+  );
+  if (!response.ok) return null;
+  const body = await response.json().catch(() => ({}));
+  if (!body.signedURL) return null;
+  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1${body.signedURL}`;
+}
+
+export function service(
+  db,
+  clock = () => new Date(),
+  supabaseConfig = {},
+) {
+  const { supabaseUrl, supabaseServiceRoleKey } = supabaseConfig;
   return {
     async requests(u) {
       const rows = await db.query(
@@ -60,6 +123,8 @@ export function service(db, clock = () => new Date()) {
           r.id,
           r.product_id,
           r.quantity,
+          r.market_unit_price,
+          ROUND(r.committed_amount * 100)::integer AS committed_cents,
           COALESCE(s.location, '') AS area,
           r.status,
           r.created_at,
@@ -194,6 +259,8 @@ export function service(db, clock = () => new Date()) {
           throw new Fault(409, "A request has already been batched");
         if (requests.some((r) => r.product_id !== first.product_id))
           throw new Fault(400, "Choose the same product for one auction");
+        if (requests.some((r) => r.group_id !== first.group_id))
+          throw new Fault(400, "Choose requests from the same buying group");
         const quantity = requests.reduce((s, r) => s + Number(r.quantity), 0);
         const auction = (
           await tx.query(
@@ -512,8 +579,68 @@ export function service(db, clock = () => new Date()) {
         return { request_id: requestId, received_at: clock().toISOString() };
       });
     },
+
+    async adminSuppliers(u) {
+      requireRole(u, "admin");
+      const rows = (
+        await db.query(
+          `SELECT
+            id,
+            business_name,
+            contact_phone,
+            location,
+            bank_confirmation_path,
+            trading_proof_path,
+            contact_verified,
+            area_verified,
+            bank_confirmation_verified,
+            trading_proof_verified,
+            verified_at
+           FROM public.suppliers
+           ORDER BY business_name`,
+        )
+      ).rows;
+      for (const supplier of rows) {
+        supplier.bank_confirmation_url = await signedDocUrl(
+          supabaseUrl,
+          supabaseServiceRoleKey,
+          supplier.bank_confirmation_path,
+        );
+        supplier.trading_proof_url = await signedDocUrl(
+          supabaseUrl,
+          supabaseServiceRoleKey,
+          supplier.trading_proof_path,
+        );
+      }
+      return rows;
+    },
+
+    async verifySupplier(u, supplierId, field, verified) {
+      requireRole(u, "admin");
+      const column = VERIFY_FIELDS[field];
+      if (!column) throw new Fault(400, "Unknown verification field");
+      return db.transaction(async (tx) => {
+        await one(
+          tx,
+          `UPDATE public.suppliers SET ${column}=$1 WHERE id=$2 RETURNING *`,
+          [verified, supplierId],
+        );
+        const supplier = await one(
+          tx,
+          `SELECT * FROM public.suppliers WHERE id=$1`,
+          [supplierId],
+        );
+        const allVerified =
+          supplier.contact_verified &&
+          supplier.area_verified &&
+          supplier.bank_confirmation_verified &&
+          supplier.trading_proof_verified;
+        await tx.query(
+          `UPDATE public.suppliers SET verified_at=$1 WHERE id=$2`,
+          [allVerified ? clock().toISOString() : null, supplierId],
+        );
+        return { id: supplierId, field, verified, allVerified };
+      });
+    },
   };
 }
- 
-
-

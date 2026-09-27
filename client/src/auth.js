@@ -248,7 +248,52 @@ export function validateSignup(f) {
     e.password = "Use at least 8 characters with letters and numbers.";
   if (f.confirm !== f.password) e.confirm = "Passwords do not match.";
   if (!f.agree) e.agree = "You need to accept the terms to continue.";
+  if (f.role === "supplier") {
+    if (!f.bankConfirmationFile) e.bankConfirmationFile = "Upload your bank confirmation letter.";
+    if (!f.tradingProofFile) e.tradingProofFile = "Upload proof of trading.";
+  }
   return e;
+}
+
+// Uploads one verification document straight to Supabase Storage, before the
+// account technically exists. Files land in a "pending/" folder that only
+// allows uploads (no reading) from an unauthenticated client -- the backend
+// later reads it with the service role key when generating signed URLs for
+// admin. Returns the storage object path to save on the Supabase user's
+// metadata, or throws with a message safe to show the person.
+export async function uploadVerificationDoc(file, kind) {
+  const { url, key } = supabaseConfig();
+  if (!url || !key)
+    throw Error(
+      "Document upload is not set up yet. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to your .env file.",
+    );
+  if (!file) throw Error("Choose a file first.");
+  if (file.size > 5 * 1024 * 1024) throw Error("File must be under 5MB.");
+  if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type))
+    throw Error("Only PDF, JPG or PNG files are allowed.");
+
+  const ext = file.name.split(".").pop() || "pdf";
+  const path = `pending/${crypto.randomUUID()}-${kind}.${ext}`;
+
+  const r = await fetch(
+    `${url}/storage/v1/object/supplier-documents/${path}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": file.type,
+      },
+      body: file,
+    },
+  );
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw Error(
+      body.message || "Could not upload the file. Please try again.",
+    );
+  }
+  return path;
 }
 
 export async function signUp(f, mode) {
@@ -280,6 +325,12 @@ export async function signUp(f, mode) {
         phone: f.phone.replace(/\s/g, ""),
         area: f.area,
         requested_role: f.role,
+        ...(f.role === "supplier"
+          ? {
+              bank_confirmation_path: f.bankConfirmationPath || "",
+              trading_proof_path: f.tradingProofPath || "",
+            }
+          : {}),
       },
     }),
   });

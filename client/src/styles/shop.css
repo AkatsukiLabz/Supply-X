@@ -1,1 +1,6 @@
 /* Shop-owner workspace styles live here. */
+
+.search-box {
+  width: 100%;
+  margin: 4px 0 20px;
+}

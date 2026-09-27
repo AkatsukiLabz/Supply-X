@@ -23,6 +23,7 @@ const app = createApp(db, {
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY,
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
 });
 app.use(express.static(fileURLToPath(new URL("../dist", import.meta.url))));
 const port = Number(process.env.PORT || 3001),

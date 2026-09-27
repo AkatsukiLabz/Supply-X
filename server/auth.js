@@ -15,8 +15,19 @@ const signupProfile = (payload) => {
   const contactName = String(meta.contact_name || businessName).trim();
   const phone = String(meta.phone || "").trim();
   const area = String(meta.area || "").trim();
+  const bankConfirmationPath = String(meta.bank_confirmation_path || "").trim();
+  const tradingProofPath = String(meta.trading_proof_path || "").trim();
   if (!role || !businessName || !contactName || !area) return null;
-  return { id: payload.sub, businessName, contactName, phone, role, area };
+  return {
+    id: payload.sub,
+    businessName,
+    contactName,
+    phone,
+    role,
+    area,
+    bankConfirmationPath,
+    tradingProofPath,
+  };
 };
 
 const publicProfile = async (db, id) =>
@@ -55,10 +66,20 @@ const createPublicProfile = async (db, profile) =>
       );
     } else {
       await tx.query(
-        `INSERT INTO public.suppliers(owner_id, business_name, contact_phone, location)
-         VALUES($1, $2, $3, $4)
+        `INSERT INTO public.suppliers(
+           owner_id, business_name, contact_phone, location,
+           bank_confirmation_path, trading_proof_path
+         )
+         VALUES($1, $2, $3, $4, $5, $6)
          ON CONFLICT DO NOTHING`,
-        [profile.id, profile.businessName, profile.phone || null, profile.area],
+        [
+          profile.id,
+          profile.businessName,
+          profile.phone || null,
+          profile.area,
+          profile.bankConfirmationPath || null,
+          profile.tradingProofPath || null,
+        ],
       );
     }
     return publicProfile(tx, profile.id);

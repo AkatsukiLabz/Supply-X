@@ -7,7 +7,10 @@ import { buyingGroups } from "./groups.js";
 const uuid = z.string().uuid();
 export function createApp(db, config = {}) {
   const app = express(),
-    s = service(db, config.clock),
+    s = service(db, config.clock, {
+      supabaseUrl: config.supabaseUrl,
+      supabaseServiceRoleKey: config.supabaseServiceRoleKey,
+    }),
     mode = config.mode || "demo";
   app.disable("x-powered-by");
   app.use(
@@ -130,6 +133,26 @@ export function createApp(db, config = {}) {
   app.post("/api/allocations/:id/receive", async (req, res) =>
     res.json(await s.receive(req.user, uuid.parse(req.params.id))),
   );
+  app.get("/api/admin/suppliers", async (req, res) =>
+    res.json(await s.adminSuppliers(req.user)),
+  );
+  app.post("/api/admin/suppliers/:id/verify", async (req, res) => {
+    const input = z
+      .object({
+        field: z.enum(["contact", "area", "bank", "trading"]),
+        verified: z.boolean(),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(
+      await s.verifySupplier(
+        req.user,
+        uuid.parse(req.params.id),
+        input.field,
+        input.verified,
+      ),
+    );
+  });
   app.use("/api", (req, res) =>
     res.status(404).json({ error: "Endpoint not found" }),
   );
